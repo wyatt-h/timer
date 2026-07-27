@@ -16,18 +16,10 @@ export function formatDuration(totalSeconds: number) {
 }
 
 export function eventDuration(event: AuraEvent) {
-  return event.agenda.reduce((sum, item) => {
-    if (item.kind === "panel" && item.speakers.length) {
-      return sum + item.speakers.reduce((speakerSum, speaker) => speakerSum + speaker.durationSeconds, 0);
-    }
-    return sum + item.durationSeconds;
-  }, 0);
+  return event.agenda.reduce((sum, item) => sum + item.durationSeconds, 0);
 }
 
 export function agendaDuration(item: AgendaItem) {
-  if (item.kind === "panel" && item.speakers.length) {
-    return item.speakers.reduce((sum, speaker) => sum + speaker.durationSeconds, 0);
-  }
   return item.durationSeconds;
 }
 

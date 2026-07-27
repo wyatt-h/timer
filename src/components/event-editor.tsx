@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, GripVertical, Plus, Trash2, UserRound, UsersRound } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
@@ -8,16 +8,28 @@ import { agendaDuration, formatDuration } from "@/lib/format";
 import { makeAgendaItem, makeEvent, useWorkspace } from "@/lib/store";
 import type { AgendaItem, AuraEvent, Speaker } from "@/lib/types";
 
-function minutes(seconds: number) {
-  return Math.max(1, Math.round(seconds / 60));
+function minutes(seconds: number | undefined, fallback = 1) {
+  return Math.max(fallback, Math.round((seconds ?? fallback * 60) / 60));
 }
 
 export function EventEditor() {
-  const params = useParams<{ team: string }>();
+  const params = useParams<{ team: string; eventId?: string }>();
   const router = useRouter();
   const team = params.team;
-  const { update } = useWorkspace(team);
+  const eventId = params.eventId;
+  const { workspace, update } = useWorkspace(team);
+  const existing = workspace?.events.find((event) => event.id === eventId);
   const [draft, setDraft] = useState<AuraEvent>(() => makeEvent("New event"));
+  const [hydratedId, setHydratedId] = useState<string | null>(null);
+  const isEditing = Boolean(eventId);
+
+  useEffect(() => {
+    if (!eventId || !existing || hydratedId === eventId) return;
+    queueMicrotask(() => {
+      setDraft(structuredClone(existing));
+      setHydratedId(eventId);
+    });
+  }, [eventId, existing, hydratedId]);
 
   const totalSeconds = useMemo(
     () => draft.agenda.reduce((sum, item) => sum + agendaDuration(item), 0),
@@ -35,11 +47,17 @@ export function EventEditor() {
     if (item.kind === kind) return;
     if (kind === "panel") {
       const panel = makeAgendaItem("panel");
-      patchItem(item.id, { kind, speakers: panel.speakers, durationSeconds: panel.durationSeconds });
+      patchItem(item.id, {
+        kind,
+        speakers: panel.speakers,
+        durationSeconds: panel.durationSeconds,
+        speakerDefaultSeconds: panel.speakerDefaultSeconds,
+      });
     } else {
       patchItem(item.id, {
         kind,
         durationSeconds: item.speakers[0]?.durationSeconds ?? 10 * 60,
+        speakerDefaultSeconds: undefined,
         speakers: [
           item.speakers[0] ?? {
             id: crypto.randomUUID(),
@@ -60,11 +78,19 @@ export function EventEditor() {
   }
 
   function addSpeaker(item: AgendaItem) {
+    const durationSeconds = item.speakerDefaultSeconds ?? 5 * 60;
     patchItem(item.id, {
       speakers: [
         ...item.speakers,
-        { id: crypto.randomUUID(), name: `Panelist ${item.speakers.length + 1}`, durationSeconds: 5 * 60 },
+        { id: crypto.randomUUID(), name: `Panelist ${item.speakers.length + 1}`, durationSeconds },
       ],
+    });
+  }
+
+  function applyDefault(item: AgendaItem) {
+    const durationSeconds = item.speakerDefaultSeconds ?? 5 * 60;
+    patchItem(item.id, {
+      speakers: item.speakers.map((speaker) => ({ ...speaker, durationSeconds })),
     });
   }
 
@@ -77,23 +103,36 @@ export function EventEditor() {
 
   function save(start = false) {
     if (!draft.name.trim() || !draft.agenda.length) return;
+    const first = draft.agenda[0];
     const firstDuration =
-      draft.agenda[0].kind === "panel"
-        ? draft.agenda[0].speakers[0]?.durationSeconds ?? 300
-        : draft.agenda[0].durationSeconds;
+      first.kind === "panel"
+        ? first.speakers[0]?.durationSeconds ?? first.speakerDefaultSeconds ?? 300
+        : first.durationSeconds;
+    const shouldResetRuntime = !existing || (start && draft.status !== "live");
     const next: AuraEvent = {
       ...draft,
       name: draft.name.trim(),
-      status: start ? "live" : "draft",
-      runtime: {
-        status: "ready",
-        segmentIndex: 0,
-        remainingSeconds: firstDuration,
-        endsAt: null,
-        updatedAt: Date.now(),
-      },
+      status: start ? "live" : draft.status,
+      runtime:
+        shouldResetRuntime
+          ? {
+              status: "ready",
+              segmentIndex: 0,
+              remainingSeconds: firstDuration,
+              endsAt: null,
+              panelStatus: first.kind === "panel" ? "ready" : null,
+              panelRemainingSeconds: first.kind === "panel" ? first.durationSeconds : null,
+              panelEndsAt: null,
+              updatedAt: Date.now(),
+            }
+          : draft.runtime,
     };
-    update((current) => ({ ...current, events: [next, ...current.events] }));
+    update((current) => ({
+      ...current,
+      events: isEditing
+        ? current.events.map((event) => (event.id === next.id ? next : event))
+        : [next, ...current.events],
+    }));
     router.push(start ? `/t/${team}/events/${next.id}` : `/t/${team}`);
   }
 
@@ -107,15 +146,19 @@ export function EventEditor() {
               <ArrowLeft size={15} />
               Back to events
             </button>
-            <h1 style={{ marginTop: 20 }}>Create an event</h1>
-            <p>Build the run of show. You can adjust every timer once the event is live.</p>
+            <h1 style={{ marginTop: 20 }}>{isEditing ? "Edit event" : "Create an event"}</h1>
+            <p>
+              {isEditing
+                ? "Update event details, timing, speakers, and the run of show."
+                : "Build the run of show. You can adjust every timer once the event is live."}
+            </p>
           </div>
           <div className="button-row">
             <button className="secondary-button" onClick={() => save(false)}>
-              Save draft
+              Save changes
             </button>
             <button className="primary-button" onClick={() => save(true)}>
-              Start event
+              {draft.status === "live" ? "Return to control" : "Start event"}
             </button>
           </div>
         </div>
@@ -237,8 +280,52 @@ export function EventEditor() {
                     </div>
                   </div>
                 ) : (
-                  <div className="speaker-list">
-                    <span className="small-label">Panelists and individual time</span>
+                  <>
+                    <div className="field-grid" style={{ marginTop: 14 }}>
+                      <div className="field">
+                        <label htmlFor={`panel-total-${item.id}`}>Panel total (minutes)</label>
+                        <input
+                          className="input"
+                          id={`panel-total-${item.id}`}
+                          min={1}
+                          type="number"
+                          value={minutes(item.durationSeconds)}
+                          onChange={(event) =>
+                            patchItem(item.id, {
+                              durationSeconds: Number(event.target.value) * 60,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="field">
+                        <label htmlFor={`speaker-default-${item.id}`}>
+                          Default per panelist (minutes)
+                        </label>
+                        <div className="inline-field-action">
+                          <input
+                            className="input"
+                            id={`speaker-default-${item.id}`}
+                            min={1}
+                            type="number"
+                            value={minutes(item.speakerDefaultSeconds, 5)}
+                            onChange={(event) =>
+                              patchItem(item.id, {
+                                speakerDefaultSeconds: Number(event.target.value) * 60,
+                              })
+                            }
+                          />
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={() => applyDefault(item)}
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="speaker-list">
+                      <span className="small-label">Panelists and individual time</span>
                     {item.speakers.map((speaker) => (
                       <div className="speaker-row" key={speaker.id}>
                         <input
@@ -282,7 +369,8 @@ export function EventEditor() {
                       <Plus size={14} />
                       Add panelist
                     </button>
-                  </div>
+                    </div>
+                  </>
                 )}
               </section>
             ))}
@@ -321,7 +409,7 @@ export function EventEditor() {
               </div>
             </div>
             <button className="primary-button full-button" onClick={() => save(true)}>
-              Start event
+              {draft.status === "live" ? "Return to control" : "Start event"}
             </button>
           </aside>
         </div>

@@ -2,18 +2,38 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowRight, CalendarDays, Clock3, MapPin, Plus } from "lucide-react";
+import { CalendarDays, Clock3, FileUp, MapPin, Pencil, Play, Plus } from "lucide-react";
+import { ChangeEvent, useRef, useState } from "react";
 import { AppHeader } from "@/components/app-header";
+import { LiveClock } from "@/components/live-clock";
+import { parseEventCsv } from "@/lib/csv";
 import { dateLabel, eventDuration, formatDuration } from "@/lib/format";
 import { useWorkspace } from "@/lib/store";
 
 export default function DashboardPage() {
   const params = useParams<{ team: string }>();
   const team = params.team;
-  const { workspace } = useWorkspace(team);
+  const { workspace, update } = useWorkspace(team);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [importMessage, setImportMessage] = useState("");
   const events = workspace?.events ?? [];
   const liveCount = events.filter((event) => event.status === "live").length;
   const totalMinutes = Math.round(events.reduce((sum, event) => sum + eventDuration(event), 0) / 60);
+
+  async function importCsv(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const imported = parseEventCsv(await file.text());
+      update((current) => ({ ...current, events: [...imported, ...current.events] }));
+      setImportMessage(`${imported.length} event${imported.length === 1 ? "" : "s"} imported.`);
+    } catch (error) {
+      setImportMessage(error instanceof Error ? error.message : "The CSV could not be imported.");
+    } finally {
+      event.target.value = "";
+      window.setTimeout(() => setImportMessage(""), 5000);
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -21,14 +41,31 @@ export default function DashboardPage() {
       <section className="dashboard">
         <div className="page-heading">
           <div>
-            <h1>Good afternoon.</h1>
+            <div className="heading-clock">
+              <h1>Good afternoon.</h1>
+              <LiveClock compact />
+            </div>
             <p>Plan the room, keep the pace, and let everyone see what matters.</p>
           </div>
-          <Link className="primary-button" href={`/t/${team}/events/new`}>
-            <Plus size={16} />
-            New event
-          </Link>
+          <div className="button-row">
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".csv,text/csv"
+              hidden
+              onChange={importCsv}
+            />
+            <button className="secondary-button" onClick={() => fileInput.current?.click()}>
+              <FileUp size={15} />
+              Import CSV
+            </button>
+            <Link className="primary-button" href={`/t/${team}/events/new`}>
+              <Plus size={16} />
+              New event
+            </Link>
+          </div>
         </div>
+        {importMessage && <div className="import-message">{importMessage}</div>}
 
         <div className="stat-grid">
           <div className="stat-card">
@@ -53,13 +90,13 @@ export default function DashboardPage() {
         {events.length ? (
           <div className="event-grid">
             {events.map((event) => (
-              <Link className="event-card" href={`/t/${team}/events/${event.id}`} key={event.id}>
+              <article className="event-card" key={event.id}>
                 <div className="event-top">
                   <span className={`status-chip ${event.status}`}>
                     {event.status === "live" && <span className="live-dot" />}
                     {event.status}
                   </span>
-                  <ArrowRight size={16} color="#aaaab1" />
+                  <span className="event-count">{event.agenda.length} items</span>
                 </div>
                 <h3>{event.name}</h3>
                 <p>{event.agenda.length} agenda items · {formatDuration(eventDuration(event))}</p>
@@ -73,7 +110,17 @@ export default function DashboardPage() {
                     {event.location || "Location TBD"}
                   </p>
                 </div>
-              </Link>
+                <div className="event-actions">
+                  <Link className="secondary-button" href={`/t/${team}/events/${event.id}/edit`}>
+                    <Pencil size={13} />
+                    Edit
+                  </Link>
+                  <Link className="primary-button" href={`/t/${team}/events/${event.id}`}>
+                    <Play size={13} fill="currentColor" />
+                    {event.status === "completed" ? "Restart" : "Control"}
+                  </Link>
+                </div>
+              </article>
             ))}
           </div>
         ) : (
@@ -84,6 +131,12 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+        <p className="csv-help">
+          Need a starting format?{" "}
+          <a href="/event-import-template.csv" download>
+            Download the CSV template
+          </a>
+        </p>
       </section>
     </main>
   );

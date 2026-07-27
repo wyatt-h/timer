@@ -6,9 +6,14 @@ Aura Timer is a focused event timer for single speakers and multi-speaker panels
 
 - Team-name onboarding with strict lowercase validation
 - Event dashboard and event builder
+- Edit existing events at any time
+- CSV batch import for one or multiple events
 - Single-speaker and panel agenda items
-- Per-speaker panel timing
+- Independent panel-total and per-speaker timing
+- Configurable default panelist duration
 - Start, pause, reset, skip, and time-adjustment controls
+- Drag-to-reorder and inline editing for upcoming live agenda items
+- Compact live control room with a wall clock
 - Fullscreen audience display
 - Realtime Supabase Broadcast updates with a one-second durable-state fallback
 - Passwordless email authentication
@@ -28,12 +33,16 @@ Open `http://localhost:3000`, enter a lowercase team name, and use the generated
 ## Connect Supabase
 
 1. Create a Supabase project.
-2. Apply `supabase/migrations/20260727000000_initial_schema.sql` in the Supabase SQL editor or with the Supabase CLI.
+2. Apply both SQL files in `supabase/migrations` in filename order, using the Supabase SQL editor or CLI.
 3. Copy `.env.example` to `.env.local`.
 4. Add the project URL and public anonymous key.
 5. In Supabase Authentication, add `http://localhost:3000/auth/callback` and the production callback URL to the allowed redirect URLs.
 
 Once configured, admins can sign in with an email link. Their local workspace is uploaded the first time they sign in. Timer state is saved as authoritative timestamps, which keeps viewers accurate even after reconnecting.
+
+## CSV event import
+
+Use the **Import CSV** button on the event dashboard. A file can contain one event or several events grouped by `event_name`. Download `public/event-import-template.csv` for the supported columns and an example containing both a single speaker and a panel.
 
 ## Deploy to Vercel
 

@@ -14,6 +14,7 @@ export function AudienceDisplay() {
   const segments = useMemo(() => (event ? flattenSegments(event) : []), [event]);
   const runtime = event?.runtime;
   const [remaining, setRemaining] = useState(runtime?.remainingSeconds ?? 0);
+  const [panelRemaining, setPanelRemaining] = useState(runtime?.panelRemainingSeconds ?? 0);
 
   useEffect(() => {
     if (!runtime) return;
@@ -23,11 +24,24 @@ export function AudienceDisplay() {
       } else {
         setRemaining(Math.max(0, runtime.remainingSeconds));
       }
+      if (runtime.panelStatus === "running" && runtime.panelEndsAt) {
+        setPanelRemaining(Math.max(0, (runtime.panelEndsAt - Date.now()) / 1000));
+      } else {
+        const liveSegment = segments[Math.min(runtime.segmentIndex, Math.max(0, segments.length - 1))];
+        const liveItem = event?.agenda.find((item) => item.id === liveSegment?.agendaItemId);
+        setPanelRemaining(
+          Math.max(
+            0,
+            runtime.panelRemainingSeconds ??
+              (liveItem?.kind === "panel" ? liveItem.durationSeconds : 0),
+          ),
+        );
+      }
     };
     tick();
     const interval = window.setInterval(tick, 200);
     return () => window.clearInterval(interval);
-  }, [runtime]);
+  }, [event, runtime, segments]);
 
   if (!result || !event || !runtime || !segments.length) {
     return (
@@ -47,6 +61,8 @@ export function AudienceDisplay() {
   const index = Math.min(runtime.segmentIndex, segments.length - 1);
   const current = segments[index];
   const next = segments[index + 1];
+  const currentItem = event.agenda.find((item) => item.id === current.agendaItemId);
+  const isPanel = currentItem?.kind === "panel";
   const isWarning = remaining <= 60;
 
   async function enterFullscreen() {
@@ -74,17 +90,36 @@ export function AudienceDisplay() {
             ? "Paused"
             : runtime.status === "ended"
               ? "Event complete"
-              : "Now speaking"}
+              : isPanel
+                ? "Panel in progress"
+                : "Now speaking"}
         </span>
         <h1>{current.title}</h1>
         <p className="audience-speaker">{current.speaker}</p>
-        <div
-          className="audience-timer"
-          style={isWarning ? { color: remaining <= 0 ? "#ff6464" : "#e8a94f" } : undefined}
-          aria-live="polite"
-        >
-          {formatTimer(remaining)}
-        </div>
+        {isPanel ? (
+          <div className="audience-panel-timers">
+            <div className="audience-panel-total">
+              <span>Panel remaining</span>
+              <strong style={panelRemaining <= 60 ? { color: "#e8a94f" } : undefined}>
+                {formatTimer(panelRemaining)}
+              </strong>
+            </div>
+            <div className="audience-speaker-total">
+              <span>{current.speaker}</span>
+              <strong style={isWarning ? { color: remaining <= 0 ? "#ff6464" : "#e8a94f" } : undefined}>
+                {formatTimer(remaining)}
+              </strong>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="audience-timer"
+            style={isWarning ? { color: remaining <= 0 ? "#ff6464" : "#e8a94f" } : undefined}
+            aria-live="polite"
+          >
+            {formatTimer(remaining)}
+          </div>
+        )}
       </section>
 
       <footer className="audience-footer">

@@ -5,26 +5,37 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Copy,
+  GripVertical,
   Maximize2,
   Pause,
+  Pencil,
   Play,
+  Plus,
   RotateCcw,
   Square,
+  Trash2,
+  UserRound,
+  UsersRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { DragEvent, useEffect, useMemo, useState } from "react";
 import { AuraMark } from "@/components/aura-mark";
+import { LiveClock } from "@/components/live-clock";
 import { flattenSegments, formatDuration, formatTimer } from "@/lib/format";
-import { useWorkspace } from "@/lib/store";
-import type { AuraEvent, RuntimeState } from "@/lib/types";
+import { makeAgendaItem, useWorkspace } from "@/lib/store";
+import type { AgendaItem, AuraEvent, RuntimeState, Speaker } from "@/lib/types";
 
-function remainingNow(runtime: RuntimeState) {
-  if (runtime.status === "running" && runtime.endsAt) {
-    return Math.max(0, (runtime.endsAt - Date.now()) / 1000);
-  }
-  return Math.max(0, runtime.remainingSeconds);
+function remainingNow(
+  status: RuntimeState["status"] | undefined,
+  endsAt: number | null | undefined,
+  fallback: number | null | undefined,
+) {
+  if (status === "running" && endsAt) return Math.max(0, (endsAt - Date.now()) / 1000);
+  return Math.max(0, fallback ?? 0);
+}
+
+function minutes(seconds: number | undefined) {
+  return Math.max(1, Math.round((seconds ?? 60) / 60));
 }
 
 export function ControlRoom() {
@@ -34,16 +45,29 @@ export function ControlRoom() {
   const event = workspace?.events.find((candidate) => candidate.id === params.eventId);
   const segments = useMemo(() => (event ? flattenSegments(event) : []), [event]);
   const runtime = event?.runtime;
-  const [displaySeconds, setDisplaySeconds] = useState(runtime ? remainingNow(runtime) : 0);
+  const [displaySeconds, setDisplaySeconds] = useState(0);
+  const [panelDisplaySeconds, setPanelDisplaySeconds] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!runtime) return;
-    const tick = () => setDisplaySeconds(remainingNow(runtime));
-    tick();
+    const tick = () => {
+      const liveSegment = segments[Math.min(runtime.segmentIndex, Math.max(0, segments.length - 1))];
+      const liveItem = event?.agenda.find((item) => item.id === liveSegment?.agendaItemId);
+      setDisplaySeconds(remainingNow(runtime.status, runtime.endsAt, runtime.remainingSeconds));
+      setPanelDisplaySeconds(
+        remainingNow(
+          runtime.panelStatus ?? undefined,
+          runtime.panelEndsAt,
+          runtime.panelRemainingSeconds ?? (liveItem?.kind === "panel" ? liveItem.durationSeconds : 0),
+        ),
+      );
+    };
+    queueMicrotask(tick);
     const interval = window.setInterval(tick, 200);
     return () => window.clearInterval(interval);
-  }, [runtime]);
+  }, [event, runtime, segments]);
 
   if (!workspace) return null;
   if (!event || !runtime || !segments.length) {
@@ -59,12 +83,19 @@ export function ControlRoom() {
     );
   }
 
+  const activeEvent = event;
   const activeRuntime = runtime;
-  const index = Math.min(activeRuntime.segmentIndex, segments.length - 1);
-  const current = segments[index];
-  const next = segments[index + 1];
-  const viewerPath = `/live/${event.viewerToken}`;
-  const activeEventId = event.id;
+  const segmentIndex = Math.min(activeRuntime.segmentIndex, segments.length - 1);
+  const current = segments[segmentIndex];
+  const currentAgendaIndex = Math.max(
+    0,
+    activeEvent.agenda.findIndex((item) => item.id === current.agendaItemId),
+  );
+  const currentItem = activeEvent.agenda[currentAgendaIndex];
+  const isPanel = currentItem.kind === "panel";
+  const viewerPath = `/live/${activeEvent.viewerToken}`;
+  const activeEventId = activeEvent.id;
+  const isEnded = activeRuntime.status === "ended" || activeEvent.status === "completed";
 
   function mutateEvent(updater: (current: AuraEvent) => AuraEvent) {
     update((currentWorkspace) => ({
@@ -79,19 +110,19 @@ export function ControlRoom() {
     mutateEvent((currentEvent) => ({
       ...currentEvent,
       ...eventPatch,
-      runtime: {
-        ...currentEvent.runtime,
-        ...patch,
-        updatedAt: Date.now(),
-      },
+      runtime: { ...currentEvent.runtime, ...patch, updatedAt: Date.now() },
     }));
   }
 
-  function toggleTimer() {
+  function toggleSpeakerTimer() {
     if (activeRuntime.status === "running") {
       setRuntime({
         status: "paused",
-        remainingSeconds: remainingNow(activeRuntime),
+        remainingSeconds: remainingNow(
+          activeRuntime.status,
+          activeRuntime.endsAt,
+          activeRuntime.remainingSeconds,
+        ),
         endsAt: null,
       });
       return;
@@ -108,31 +139,99 @@ export function ControlRoom() {
     );
   }
 
-  function jumpTo(targetIndex: number) {
+  function togglePanelTimer() {
+    const panelStatus = activeRuntime.panelStatus ?? "ready";
+    if (panelStatus === "running") {
+      setRuntime({
+        panelStatus: "paused",
+        panelRemainingSeconds: remainingNow(
+          panelStatus,
+          activeRuntime.panelEndsAt,
+          activeRuntime.panelRemainingSeconds ?? currentItem.durationSeconds,
+        ),
+        panelEndsAt: null,
+      });
+      return;
+    }
+    const seconds =
+      panelStatus === "ended"
+        ? currentItem.durationSeconds
+        : activeRuntime.panelRemainingSeconds ?? currentItem.durationSeconds;
+    setRuntime(
+      {
+        panelStatus: "running",
+        panelRemainingSeconds: seconds,
+        panelEndsAt: Date.now() + seconds * 1000,
+      },
+      { status: "live" },
+    );
+  }
+
+  function handleJumpTo(targetIndex: number, startSpeaker = false, startedAt = 0) {
     const safeIndex = Math.max(0, Math.min(segments.length - 1, targetIndex));
-    const segment = segments[safeIndex];
+    const target = segments[safeIndex];
+    const targetItem = activeEvent.agenda.find((item) => item.id === target.agendaItemId);
+    if (!targetItem) return;
+    const samePanel = targetItem.id === currentItem.id && targetItem.kind === "panel";
     setRuntime({
-      status: activeRuntime.status === "running" ? "running" : "paused",
+      status: startSpeaker ? "running" : "paused",
       segmentIndex: safeIndex,
-      remainingSeconds: segment.durationSeconds,
-      endsAt:
-        activeRuntime.status === "running" ? Date.now() + segment.durationSeconds * 1000 : null,
+      remainingSeconds: target.durationSeconds,
+      endsAt: startSpeaker ? startedAt + target.durationSeconds * 1000 : null,
+      panelStatus:
+        targetItem.kind === "panel"
+          ? samePanel
+            ? activeRuntime.panelStatus ?? "ready"
+            : "ready"
+          : null,
+      panelRemainingSeconds:
+        targetItem.kind === "panel"
+          ? samePanel
+            ? activeRuntime.panelRemainingSeconds ?? currentItem.durationSeconds
+            : targetItem.durationSeconds
+          : null,
+      panelEndsAt:
+        targetItem.kind === "panel" && samePanel ? activeRuntime.panelEndsAt ?? null : null,
     });
   }
 
-  function adjust(seconds: number) {
-    const adjusted = Math.max(0, remainingNow(activeRuntime) + seconds);
-    setRuntime({
-      remainingSeconds: adjusted,
-      endsAt: activeRuntime.status === "running" ? Date.now() + adjusted * 1000 : null,
-    });
+  function adjust(seconds: number, panel = false) {
+    if (panel) {
+      const adjusted =
+        remainingNow(
+          activeRuntime.panelStatus ?? undefined,
+          activeRuntime.panelEndsAt,
+          activeRuntime.panelRemainingSeconds,
+        ) + seconds;
+      setRuntime({
+        panelRemainingSeconds: Math.max(0, adjusted),
+        panelEndsAt:
+          activeRuntime.panelStatus === "running"
+            ? Date.now() + Math.max(0, adjusted) * 1000
+            : null,
+      });
+    } else {
+      const adjusted =
+        remainingNow(activeRuntime.status, activeRuntime.endsAt, activeRuntime.remainingSeconds) +
+        seconds;
+      setRuntime({
+        remainingSeconds: Math.max(0, adjusted),
+        endsAt:
+          activeRuntime.status === "running"
+            ? Date.now() + Math.max(0, adjusted) * 1000
+            : null,
+      });
+    }
   }
 
-  function reset() {
+  function resetCurrent() {
     setRuntime({
       status: "paused",
       remainingSeconds: current.durationSeconds,
       endsAt: null,
+      panelStatus: isPanel ? "ready" : null,
+      panelRemainingSeconds: isPanel ? currentItem.durationSeconds : null,
+      panelEndsAt: null,
     });
   }
 
@@ -142,118 +241,179 @@ export function ControlRoom() {
         status: "ended",
         remainingSeconds: 0,
         endsAt: null,
+        panelStatus: isPanel ? "ended" : null,
+        panelRemainingSeconds: isPanel ? 0 : null,
+        panelEndsAt: null,
       },
       { status: "completed" },
     );
   }
 
+  function startEvent() {
+    const firstItem = activeEvent.agenda[0];
+    const firstSegment = segments[0];
+    setRuntime(
+      {
+        status: "ready",
+        segmentIndex: 0,
+        remainingSeconds: firstSegment.durationSeconds,
+        endsAt: null,
+        panelStatus: firstItem.kind === "panel" ? "ready" : null,
+        panelRemainingSeconds: firstItem.kind === "panel" ? firstItem.durationSeconds : null,
+        panelEndsAt: null,
+      },
+      { status: "live" },
+    );
+  }
+
+  function patchAgendaItem(itemId: string, patch: Partial<AgendaItem>) {
+    mutateEvent((currentEvent) => ({
+      ...currentEvent,
+      agenda: currentEvent.agenda.map((item) =>
+        item.id === itemId ? { ...item, ...patch } : item,
+      ),
+    }));
+  }
+
+  function patchSpeaker(item: AgendaItem, speakerId: string, patch: Partial<Speaker>) {
+    patchAgendaItem(item.id, {
+      speakers: item.speakers.map((speaker) =>
+        speaker.id === speakerId ? { ...speaker, ...patch } : speaker,
+      ),
+    });
+  }
+
+  function changeFutureKind(item: AgendaItem, kind: AgendaItem["kind"]) {
+    if (item.kind === kind) return;
+    const fresh = makeAgendaItem(kind);
+    patchAgendaItem(item.id, {
+      kind,
+      durationSeconds: fresh.durationSeconds,
+      speakerDefaultSeconds: fresh.speakerDefaultSeconds,
+      speakers: fresh.speakers,
+    });
+  }
+
+  function removeFutureItem(itemId: string) {
+    mutateEvent((currentEvent) => ({
+      ...currentEvent,
+      agenda: currentEvent.agenda.filter((item) => item.id !== itemId),
+    }));
+  }
+
+  function dropFutureItem(targetId: string) {
+    if (!draggedItemId || draggedItemId === targetId) return;
+    mutateEvent((currentEvent) => {
+      const locked = currentEvent.agenda.slice(0, currentAgendaIndex + 1);
+      const future = currentEvent.agenda.slice(currentAgendaIndex + 1);
+      const sourceIndex = future.findIndex((item) => item.id === draggedItemId);
+      const targetIndex = future.findIndex((item) => item.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return currentEvent;
+      const reordered = [...future];
+      const [moved] = reordered.splice(sourceIndex, 1);
+      reordered.splice(targetIndex, 0, moved);
+      return { ...currentEvent, agenda: [...locked, ...reordered] };
+    });
+    setDraggedItemId(null);
+  }
+
   async function copyLink() {
-    const link = `${window.location.origin}${viewerPath}`;
-    await navigator.clipboard.writeText(link);
+    await navigator.clipboard.writeText(`${window.location.origin}${viewerPath}`);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   }
 
-  const timerClass =
-    displaySeconds <= 0 ? "timer-display overtime" : displaySeconds <= 60 ? "timer-display warning" : "timer-display";
-
   return (
-    <main className="controller-shell">
-      <header className="controller-header">
+    <main className="live-admin-shell">
+      <header className="live-admin-header">
         <div className="button-row">
           <Link className="ghost-button" href={`/t/${params.team}`}>
             <ArrowLeft size={15} />
-            <span>Events</span>
+            Events
           </Link>
           <AuraMark />
         </div>
+        <div className="live-admin-title">
+          <strong>{activeEvent.name}</strong>
+          <span>{activeEvent.location}</span>
+        </div>
         <div className="button-row">
+          <LiveClock />
+          <Link className="secondary-button" href={`/t/${params.team}/events/${activeEvent.id}/edit`}>
+            <Pencil size={14} />
+            Edit
+          </Link>
           <Link className="secondary-button" href={viewerPath} target="_blank">
             <Maximize2 size={14} />
-            Audience view
+            Audience
           </Link>
-          <button className="danger-button" onClick={endEvent}>
-            <Square size={12} fill="currentColor" />
-            End event
-          </button>
+          {isEnded ? (
+            <button className="primary-button" onClick={startEvent}>
+              <Play size={13} fill="currentColor" />
+              Start event
+            </button>
+          ) : (
+            <button className="danger-button" onClick={endEvent}>
+              <Square size={11} fill="currentColor" />
+              End event
+            </button>
+          )}
         </div>
       </header>
 
-      <div className="controller-grid">
-        <section className="controller-card">
-          <span className="now-label">
-            {activeRuntime.status === "paused"
-              ? "Paused"
-              : activeRuntime.status === "ended"
-                ? "Event ended"
-                : "Now speaking"}
-          </span>
+      <div className="live-admin-grid">
+        <section className="compact-timer-card">
+          <span className="now-label">{isPanel ? "Current panel" : "Now speaking"}</span>
           <h1>{current.title}</h1>
           <p className="speaker-name">{current.speaker}</p>
 
-          <div className={timerClass} aria-live="polite">
-            {formatTimer(displaySeconds)}
-          </div>
-
-          <div className="timer-controls">
-            <button
-              className="round-control"
-              onClick={() => jumpTo(index - 1)}
-              disabled={index === 0}
-              aria-label="Previous speaker"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <button className="round-control" onClick={reset} aria-label="Reset timer">
-              <RotateCcw size={17} />
-            </button>
-            <button className="play-control" onClick={toggleTimer} aria-label="Play or pause timer">
-              {activeRuntime.status === "running" ? (
-                <Pause size={23} fill="currentColor" />
-              ) : (
-                <Play size={23} fill="currentColor" style={{ marginLeft: 3 }} />
-              )}
-            </button>
-            <button
-              className="round-control"
-              onClick={() => jumpTo(index + 1)}
-              disabled={index === segments.length - 1}
-              aria-label="Next speaker"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
-
-          <div className="time-adjust">
-            <button onClick={() => adjust(-60)}>−1 min</button>
-            <button onClick={() => adjust(-15)}>−15 sec</button>
-            <button onClick={() => adjust(15)}>+15 sec</button>
-            <button onClick={() => adjust(60)}>+1 min</button>
-          </div>
-        </section>
-
-        <aside className="agenda-sidebar">
-          <h2>Run of show</h2>
-          <div className="run-list">
-            {segments.map((segment, segmentIndex) => (
-              <button
-                className={`run-item ${
-                  segmentIndex === index ? "active" : segmentIndex < index ? "done" : ""
-                }`}
-                key={segment.id}
-                onClick={() => jumpTo(segmentIndex)}
-                style={{ border: 0, width: "100%", textAlign: "left", cursor: "pointer" }}
-              >
-                <span className="run-number">
-                  {segmentIndex < index ? <Check size={11} /> : segmentIndex + 1}
-                </span>
-                <span className="run-copy">
-                  <strong>{segment.title}</strong>
-                  <span>{segment.speaker}</span>
-                </span>
-                <span>{formatDuration(segment.durationSeconds)}</span>
+          {isPanel ? (
+            <>
+              <div className="panel-total-block">
+                <span>Panel remaining</span>
+                <strong className={panelDisplaySeconds <= 60 ? "warning-text" : ""}>
+                  {formatTimer(panelDisplaySeconds)}
+                </strong>
+                <button className="secondary-button full-button" onClick={togglePanelTimer}>
+                  {activeRuntime.panelStatus === "running" ? <Pause size={14} /> : <Play size={14} />}
+                  {activeRuntime.panelStatus === "running" ? "Pause panel" : "Start panel"}
+                </button>
+              </div>
+              <div className="speaker-timer-block">
+                <span>Current speaker</span>
+                <strong className={displaySeconds <= 60 ? "warning-text" : ""}>
+                  {formatTimer(displaySeconds)}
+                </strong>
+                <button className="primary-button full-button" onClick={toggleSpeakerTimer}>
+                  {activeRuntime.status === "running" ? <Pause size={14} /> : <Play size={14} />}
+                  {activeRuntime.status === "running" ? "Pause speaker" : "Start speaker"}
+                </button>
+                <div className="mini-adjust-row">
+                  <button onClick={() => adjust(-15)}>−15s</button>
+                  <button onClick={() => adjust(15)}>+15s</button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="single-compact-timer">
+              <strong className={displaySeconds <= 60 ? "warning-text" : ""}>
+                {formatTimer(displaySeconds)}
+              </strong>
+              <button className="primary-button full-button" onClick={toggleSpeakerTimer}>
+                {activeRuntime.status === "running" ? <Pause size={14} /> : <Play size={14} />}
+                {activeRuntime.status === "running" ? "Pause timer" : "Start timer"}
               </button>
-            ))}
+            </div>
+          )}
+
+          <div className="compact-timer-actions">
+            <button onClick={() => adjust(-60, isPanel)}>−1m</button>
+            <button onClick={() => adjust(-15, isPanel)}>−15s</button>
+            <button onClick={resetCurrent} aria-label="Reset timer">
+              <RotateCcw size={13} />
+            </button>
+            <button onClick={() => adjust(15, isPanel)}>+15s</button>
+            <button onClick={() => adjust(60, isPanel)}>+1m</button>
           </div>
 
           <div className="share-box">
@@ -265,15 +425,241 @@ export function ControlRoom() {
               </button>
             </div>
           </div>
+        </section>
 
-          {next && (
-            <div className="share-box">
-              <span>Next up</span>
-              <strong style={{ display: "block", fontSize: 11 }}>{next.title}</strong>
-              <small style={{ color: "#96969d", fontSize: 9 }}>{next.speaker}</small>
+        <section className="run-workspace">
+          <div className="run-workspace-heading">
+            <div>
+              <span className="small-label">Live run of show</span>
+              <h2>Control what happens next</h2>
             </div>
-          )}
-        </aside>
+            <span className="event-count">
+              {activeEvent.agenda.length - currentAgendaIndex - 1} upcoming
+            </span>
+          </div>
+
+          <div className="editable-run-list">
+            {activeEvent.agenda.map((item, itemIndex) => {
+              const isPast = itemIndex < currentAgendaIndex;
+              const isCurrent = itemIndex === currentAgendaIndex;
+              const isFuture = itemIndex > currentAgendaIndex;
+              return (
+                <article
+                  key={item.id}
+                  className={`editable-run-item ${isCurrent ? "current" : ""} ${
+                    isPast ? "past" : ""
+                  }`}
+                  draggable={isFuture}
+                  onDragStart={() => isFuture && setDraggedItemId(item.id)}
+                  onDragOver={(dragEvent: DragEvent<HTMLElement>) => {
+                    if (isFuture) dragEvent.preventDefault();
+                  }}
+                  onDrop={() => isFuture && dropFutureItem(item.id)}
+                >
+                  <div className="editable-run-index">
+                    {isFuture ? <GripVertical size={16} /> : itemIndex + 1}
+                  </div>
+                  <div className="editable-run-content">
+                    <div className="editable-run-topline">
+                      <span className={`type-chip ${item.kind}`}>
+                        {item.kind === "panel" ? <UsersRound size={11} /> : <UserRound size={11} />}
+                        {item.kind}
+                      </span>
+                      {isCurrent && <span className="status-chip live">On now</span>}
+                      {isPast && <span className="status-chip completed">Complete</span>}
+                    </div>
+
+                    {isFuture ? (
+                      <>
+                        <div className="future-item-grid">
+                          <input
+                            className="input"
+                            aria-label="Agenda title"
+                            value={item.title}
+                            onChange={(inputEvent) =>
+                              patchAgendaItem(item.id, { title: inputEvent.target.value })
+                            }
+                          />
+                          <select
+                            className="select"
+                            aria-label="Agenda type"
+                            value={item.kind}
+                            onChange={(inputEvent) =>
+                              changeFutureKind(item, inputEvent.target.value as AgendaItem["kind"])
+                            }
+                          >
+                            <option value="single">Speaker</option>
+                            <option value="panel">Panel</option>
+                          </select>
+                          <label className="inline-minutes">
+                            <input
+                              className="input"
+                              type="number"
+                              min={1}
+                              value={minutes(item.durationSeconds)}
+                              onChange={(inputEvent) =>
+                                patchAgendaItem(item.id, {
+                                  durationSeconds: Number(inputEvent.target.value) * 60,
+                                })
+                              }
+                            />
+                            min total
+                          </label>
+                          <button
+                            className="mini-icon"
+                            onClick={() => removeFutureItem(item.id)}
+                            aria-label={`Remove ${item.title}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                        <div className="future-speakers">
+                          {item.kind === "panel" && (
+                            <div className="future-panel-default">
+                              <span>Default per panelist</span>
+                              <label className="inline-minutes">
+                                <input
+                                  className="input"
+                                  type="number"
+                                  min={1}
+                                  value={minutes(item.speakerDefaultSeconds ?? 5 * 60)}
+                                  onChange={(inputEvent) =>
+                                    patchAgendaItem(item.id, {
+                                      speakerDefaultSeconds: Number(inputEvent.target.value) * 60,
+                                    })
+                                  }
+                                />
+                                min
+                              </label>
+                              <button
+                                className="secondary-button"
+                                onClick={() =>
+                                  patchAgendaItem(item.id, {
+                                    speakers: item.speakers.map((speaker) => ({
+                                      ...speaker,
+                                      durationSeconds: item.speakerDefaultSeconds ?? 5 * 60,
+                                    })),
+                                  })
+                                }
+                              >
+                                Apply to all
+                              </button>
+                            </div>
+                          )}
+                          {item.speakers.map((speaker) => (
+                            <div className="future-speaker-row" key={speaker.id}>
+                              <input
+                                className="input"
+                                aria-label="Speaker name"
+                                value={speaker.name}
+                                onChange={(inputEvent) =>
+                                  patchSpeaker(item, speaker.id, { name: inputEvent.target.value })
+                                }
+                              />
+                              <label className="inline-minutes">
+                                <input
+                                  className="input"
+                                  type="number"
+                                  min={1}
+                                  value={minutes(speaker.durationSeconds)}
+                                  onChange={(inputEvent) =>
+                                    patchSpeaker(item, speaker.id, {
+                                      durationSeconds: Number(inputEvent.target.value) * 60,
+                                    })
+                                  }
+                                />
+                                min
+                              </label>
+                              {item.kind === "panel" && (
+                                <button
+                                  className="mini-icon"
+                                  disabled={item.speakers.length === 1}
+                                  onClick={() =>
+                                    patchAgendaItem(item.id, {
+                                      speakers: item.speakers.filter(
+                                        (candidate) => candidate.id !== speaker.id,
+                                      ),
+                                    })
+                                  }
+                                  aria-label={`Remove ${speaker.name}`}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {item.kind === "panel" && (
+                            <button
+                              className="ghost-button"
+                              onClick={() =>
+                                patchAgendaItem(item.id, {
+                                  speakers: [
+                                    ...item.speakers,
+                                    {
+                                      id: crypto.randomUUID(),
+                                      name: `Panelist ${item.speakers.length + 1}`,
+                                      durationSeconds: item.speakerDefaultSeconds ?? 5 * 60,
+                                    },
+                                  ],
+                                })
+                              }
+                            >
+                              <Plus size={13} />
+                              Add panelist
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <h3>{item.title}</h3>
+                        <p>{formatDuration(item.durationSeconds)} total</p>
+                        {isCurrent && item.kind === "panel" && (
+                          <div className="current-panel-speakers">
+                            {item.speakers.map((speaker) => {
+                              const speakerIndex = segments.findIndex(
+                                (segment) => segment.id === speaker.id,
+                              );
+                              const speakerIsCurrent = speakerIndex === segmentIndex;
+                              return (
+                                <button
+                                  key={speaker.id}
+                                  className={speakerIsCurrent ? "active" : ""}
+                                  disabled={activeRuntime.panelStatus === "ready"}
+                                  onClick={() => handleJumpTo(speakerIndex, true, Date.now())}
+                                >
+                                  <span>{speaker.name}</span>
+                                  <strong>
+                                    {speakerIsCurrent && activeRuntime.status === "running"
+                                      ? "Speaking"
+                                      : `Start · ${formatDuration(speaker.durationSeconds)}`}
+                                  </strong>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <button
+            className="add-item-button"
+            onClick={() =>
+              mutateEvent((currentEvent) => ({
+                ...currentEvent,
+                agenda: [...currentEvent.agenda, makeAgendaItem()],
+              }))
+            }
+          >
+            <Plus size={14} style={{ display: "inline", marginRight: 6 }} />
+            Add upcoming item
+          </button>
+        </section>
       </div>
     </main>
   );

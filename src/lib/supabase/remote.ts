@@ -13,6 +13,7 @@ type DbAgenda = {
   kind: "single" | "panel";
   title: string;
   duration_seconds: number;
+  speaker_default_seconds: number | null;
   order_index: number;
   speakers: DbSpeaker[];
 };
@@ -22,6 +23,9 @@ type DbRuntime = {
   segment_index: number;
   remaining_seconds: number;
   ends_at: string | null;
+  panel_status: "ready" | "running" | "paused" | "ended" | null;
+  panel_remaining_seconds: number | null;
+  panel_ends_at: string | null;
   updated_at: string;
 };
 
@@ -47,6 +51,7 @@ function mapAgenda(row: DbAgenda): AgendaItem {
     kind: row.kind,
     title: row.title,
     durationSeconds: row.duration_seconds,
+    speakerDefaultSeconds: row.speaker_default_seconds ?? undefined,
     speakers: [...(row.speakers ?? [])]
       .sort((a, b) => a.order_index - b.order_index)
       .map(mapSpeaker),
@@ -72,6 +77,14 @@ function mapEvent(row: DbEvent): AuraEvent {
           segmentIndex: runtime.segment_index,
           remainingSeconds: Number(runtime.remaining_seconds),
           endsAt: runtime.ends_at ? new Date(runtime.ends_at).getTime() : null,
+          panelStatus: runtime.panel_status,
+          panelRemainingSeconds:
+            runtime.panel_remaining_seconds === null
+              ? null
+              : Number(runtime.panel_remaining_seconds),
+          panelEndsAt: runtime.panel_ends_at
+            ? new Date(runtime.panel_ends_at).getTime()
+            : null,
           updatedAt: new Date(runtime.updated_at).getTime(),
         }
       : {
@@ -79,6 +92,9 @@ function mapEvent(row: DbEvent): AuraEvent {
           segmentIndex: 0,
           remainingSeconds: row.agenda_items?.[0]?.duration_seconds ?? 600,
           endsAt: null,
+          panelStatus: null,
+          panelRemainingSeconds: null,
+          panelEndsAt: null,
           updatedAt: Date.now(),
         },
   };
@@ -96,7 +112,7 @@ export async function pullWorkspace(client: SupabaseClient, team: string): Promi
   const { data, error } = await client
     .from("events")
     .select(
-      "id, name, event_date, location, status, viewer_token, created_at, agenda_items(id, kind, title, duration_seconds, order_index, speakers(id, name, duration_seconds, order_index)), event_runtime(status, segment_index, remaining_seconds, ends_at, updated_at)",
+      "id, name, event_date, location, status, viewer_token, created_at, agenda_items(id, kind, title, duration_seconds, speaker_default_seconds, order_index, speakers(id, name, duration_seconds, order_index)), event_runtime(status, segment_index, remaining_seconds, ends_at, panel_status, panel_remaining_seconds, panel_ends_at, updated_at)",
     )
     .eq("team_id", teamRow.id)
     .order("created_at", { ascending: false });
@@ -164,6 +180,7 @@ export async function pushWorkspace(client: SupabaseClient, workspace: Workspace
         kind: item.kind,
         title: item.title,
         duration_seconds: item.durationSeconds,
+        speaker_default_seconds: item.speakerDefaultSeconds ?? null,
         order_index: orderIndex,
       });
       if (agendaResult.error) throw agendaResult.error;
@@ -199,6 +216,11 @@ export async function pushWorkspace(client: SupabaseClient, workspace: Workspace
       segment_index: event.runtime.segmentIndex,
       remaining_seconds: event.runtime.remainingSeconds,
       ends_at: event.runtime.endsAt ? new Date(event.runtime.endsAt).toISOString() : null,
+      panel_status: event.runtime.panelStatus ?? null,
+      panel_remaining_seconds: event.runtime.panelRemainingSeconds ?? null,
+      panel_ends_at: event.runtime.panelEndsAt
+        ? new Date(event.runtime.panelEndsAt).toISOString()
+        : null,
       updated_by: user.id,
     });
     if (runtimeResult.error) throw runtimeResult.error;
@@ -214,7 +236,11 @@ export async function pullPublicEvent(
   const payload = data as {
     team: string;
     event: AuraEvent & {
-      runtime: AuraEvent["runtime"] & { endsAt: string | null; updatedAt: string };
+      runtime: AuraEvent["runtime"] & {
+        endsAt: string | null;
+        panelEndsAt: string | null;
+        updatedAt: string;
+      };
     };
   };
   const event: AuraEvent = {
@@ -223,6 +249,9 @@ export async function pullPublicEvent(
       ...payload.event.runtime,
       endsAt: payload.event.runtime.endsAt
         ? new Date(payload.event.runtime.endsAt).getTime()
+        : null,
+      panelEndsAt: payload.event.runtime.panelEndsAt
+        ? new Date(payload.event.runtime.panelEndsAt).getTime()
         : null,
       updatedAt: new Date(payload.event.runtime.updatedAt).getTime(),
     },

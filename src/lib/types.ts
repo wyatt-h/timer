@@ -13,6 +13,7 @@ export interface AgendaItem {
   kind: AgendaKind;
   title: string;
   durationSeconds: number;
+  speakerDefaultSeconds?: number;
   speakers: Speaker[];
 }
 
@@ -21,6 +22,9 @@ export interface RuntimeState {
   segmentIndex: number;
   remainingSeconds: number;
   endsAt: number | null;
+  panelStatus?: TimerStatus | null;
+  panelRemainingSeconds?: number | null;
+  panelEndsAt?: number | null;
   updatedAt: number;
 }
 

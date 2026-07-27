@@ -34,7 +34,8 @@ export function makeAgendaItem(kind: "single" | "panel" = "single"): AgendaItem 
     id,
     kind,
     title: kind === "single" ? "Opening remarks" : "Panel discussion",
-    durationSeconds: 10 * 60,
+    durationSeconds: kind === "panel" ? 20 * 60 : 10 * 60,
+    speakerDefaultSeconds: kind === "panel" ? 5 * 60 : undefined,
     speakers:
       kind === "panel"
         ? [
@@ -60,6 +61,9 @@ export function makeEvent(name = "Untitled event"): AuraEvent {
       segmentIndex: 0,
       remainingSeconds: first.durationSeconds,
       endsAt: null,
+      panelStatus: null,
+      panelRemainingSeconds: null,
+      panelEndsAt: null,
       updatedAt: Date.now(),
     },
     createdAt: Date.now(),
@@ -82,6 +86,7 @@ function demoWorkspace(team: string): Workspace {
       kind: "panel",
       title: "Building teams that last",
       durationSeconds: 25 * 60,
+      speakerDefaultSeconds: 8 * 60,
       speakers: [
         { id: makeId(), name: "Noah Williams", durationSeconds: 8 * 60 },
         { id: makeId(), name: "Sofia Patel", durationSeconds: 8 * 60 },
