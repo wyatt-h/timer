@@ -4,13 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, GripVertical, Plus, Trash2, UserRound, UsersRound } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
+import { DurationInput } from "@/components/duration-input";
+import { SortableList } from "@/components/sortable-list";
 import { agendaDuration, formatDuration } from "@/lib/format";
 import { makeAgendaItem, makeEvent, useWorkspace } from "@/lib/store";
 import type { AgendaItem, AuraEvent, Speaker } from "@/lib/types";
-
-function minutes(seconds: number | undefined, fallback = 1) {
-  return Math.max(fallback, Math.round((seconds ?? fallback * 60) / 60));
-}
 
 export function EventEditor() {
   const params = useParams<{ team: string; eventId?: string }>();
@@ -200,11 +198,25 @@ export function EventEditor() {
               </div>
             </section>
 
-            {draft.agenda.map((item, index) => (
-              <section className="panel-card agenda-item" key={item.id}>
+            <SortableList
+              className="editor-agenda-list"
+              items={draft.agenda}
+              scope={`event-agenda-${draft.id}`}
+              onReorder={(agenda) => setDraft((current) => ({ ...current, agenda }))}
+              renderItem={(item, index, { dragHandleRef, onHandleKeyDown }) => (
+              <section className="panel-card agenda-item">
                 <div className="agenda-item-header">
                   <div className="agenda-number">
-                    <GripVertical className="drag-handle" size={16} />
+                    <button
+                      className="drag-handle-button"
+                      type="button"
+                      ref={dragHandleRef}
+                      aria-label={`Drag agenda item ${index + 1}`}
+                      title="Drag to reorder, or press Alt + Up/Down"
+                      onKeyDown={onHandleKeyDown}
+                    >
+                      <GripVertical size={16} />
+                    </button>
                     Item {index + 1}
                   </div>
                   <div className="button-row">
@@ -267,14 +279,11 @@ export function EventEditor() {
                     </div>
                     <div className="field">
                       <label htmlFor={`duration-${item.id}`}>Total time (minutes)</label>
-                      <input
-                        className="input"
+                      <DurationInput
                         id={`duration-${item.id}`}
-                        min={1}
-                        type="number"
-                        value={minutes(item.durationSeconds)}
-                        onChange={(event) =>
-                          patchItem(item.id, { durationSeconds: Number(event.target.value) * 60 })
+                        seconds={item.durationSeconds}
+                        onSecondsChange={(durationSeconds) =>
+                          patchItem(item.id, { durationSeconds })
                         }
                       />
                     </div>
@@ -284,16 +293,11 @@ export function EventEditor() {
                     <div className="field-grid" style={{ marginTop: 14 }}>
                       <div className="field">
                         <label htmlFor={`panel-total-${item.id}`}>Panel total (minutes)</label>
-                        <input
-                          className="input"
+                        <DurationInput
                           id={`panel-total-${item.id}`}
-                          min={1}
-                          type="number"
-                          value={minutes(item.durationSeconds)}
-                          onChange={(event) =>
-                            patchItem(item.id, {
-                              durationSeconds: Number(event.target.value) * 60,
-                            })
+                          seconds={item.durationSeconds}
+                          onSecondsChange={(durationSeconds) =>
+                            patchItem(item.id, { durationSeconds })
                           }
                         />
                       </div>
@@ -302,16 +306,12 @@ export function EventEditor() {
                           Default per panelist (minutes)
                         </label>
                         <div className="inline-field-action">
-                          <input
-                            className="input"
+                          <DurationInput
                             id={`speaker-default-${item.id}`}
-                            min={1}
-                            type="number"
-                            value={minutes(item.speakerDefaultSeconds, 5)}
-                            onChange={(event) =>
-                              patchItem(item.id, {
-                                speakerDefaultSeconds: Number(event.target.value) * 60,
-                              })
+                            seconds={item.speakerDefaultSeconds}
+                            fallbackMinutes={5}
+                            onSecondsChange={(speakerDefaultSeconds) =>
+                              patchItem(item.id, { speakerDefaultSeconds })
                             }
                           />
                           <button
@@ -326,8 +326,27 @@ export function EventEditor() {
                     </div>
                     <div className="speaker-list">
                       <span className="small-label">Panelists and individual time</span>
-                    {item.speakers.map((speaker) => (
-                      <div className="speaker-row" key={speaker.id}>
+                      <SortableList
+                        className="sortable-speaker-list"
+                        items={item.speakers}
+                        scope={`panelists-${item.id}`}
+                        onReorder={(speakers) => patchItem(item.id, { speakers })}
+                        renderItem={(
+                          speaker,
+                          speakerIndex,
+                          { dragHandleRef, onHandleKeyDown },
+                        ) => (
+                      <div className="speaker-row">
+                        <button
+                          className="drag-handle-button compact"
+                          type="button"
+                          ref={dragHandleRef}
+                          aria-label={`Drag ${speaker.name || `panelist ${speakerIndex + 1}`}`}
+                          title="Drag to reorder, or press Alt + Up/Down"
+                          onKeyDown={onHandleKeyDown}
+                        >
+                          <GripVertical size={15} />
+                        </button>
                         <input
                           className="input"
                           aria-label="Panelist name"
@@ -336,16 +355,11 @@ export function EventEditor() {
                             patchSpeaker(item, speaker.id, { name: event.target.value })
                           }
                         />
-                        <input
-                          className="input"
+                        <DurationInput
                           aria-label={`${speaker.name} minutes`}
-                          min={1}
-                          type="number"
-                          value={minutes(speaker.durationSeconds)}
-                          onChange={(event) =>
-                            patchSpeaker(item, speaker.id, {
-                              durationSeconds: Number(event.target.value) * 60,
-                            })
+                          seconds={speaker.durationSeconds}
+                          onSecondsChange={(durationSeconds) =>
+                            patchSpeaker(item, speaker.id, { durationSeconds })
                           }
                         />
                         <button
@@ -364,7 +378,8 @@ export function EventEditor() {
                           <Trash2 size={14} />
                         </button>
                       </div>
-                    ))}
+                        )}
+                      />
                     <button className="ghost-button" type="button" onClick={() => addSpeaker(item)}>
                       <Plus size={14} />
                       Add panelist
@@ -373,7 +388,8 @@ export function EventEditor() {
                   </>
                 )}
               </section>
-            ))}
+              )}
+            />
 
             <button
               className="add-item-button"

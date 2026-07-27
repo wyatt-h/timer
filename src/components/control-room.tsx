@@ -13,14 +13,18 @@ import {
   Play,
   Plus,
   RotateCcw,
+  SkipBack,
+  SkipForward,
   Square,
   Trash2,
   UserRound,
   UsersRound,
 } from "lucide-react";
-import { DragEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AuraMark } from "@/components/aura-mark";
+import { DurationInput } from "@/components/duration-input";
 import { LiveClock } from "@/components/live-clock";
+import { SortableList } from "@/components/sortable-list";
 import { flattenSegments, formatDuration, formatTimer } from "@/lib/format";
 import { makeAgendaItem, useWorkspace } from "@/lib/store";
 import type { AgendaItem, AuraEvent, RuntimeState, Speaker } from "@/lib/types";
@@ -34,10 +38,6 @@ function remainingNow(
   return Math.max(0, fallback ?? 0);
 }
 
-function minutes(seconds: number | undefined) {
-  return Math.max(1, Math.round((seconds ?? 60) / 60));
-}
-
 export function ControlRoom() {
   const params = useParams<{ team: string; eventId: string }>();
   const router = useRouter();
@@ -48,7 +48,6 @@ export function ControlRoom() {
   const [displaySeconds, setDisplaySeconds] = useState(0);
   const [panelDisplaySeconds, setPanelDisplaySeconds] = useState(0);
   const [copied, setCopied] = useState(false);
-  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!runtime) return;
@@ -93,6 +92,8 @@ export function ControlRoom() {
   );
   const currentItem = activeEvent.agenda[currentAgendaIndex];
   const isPanel = currentItem.kind === "panel";
+  const previousPart = segments[segmentIndex - 1];
+  const nextPart = segments[segmentIndex + 1];
   const viewerPath = `/live/${activeEvent.viewerToken}`;
   const activeEventId = activeEvent.id;
   const isEnded = activeRuntime.status === "ended" || activeEvent.status === "completed";
@@ -173,6 +174,14 @@ export function ControlRoom() {
     const targetItem = activeEvent.agenda.find((item) => item.id === target.agendaItemId);
     if (!targetItem) return;
     const samePanel = targetItem.id === currentItem.id && targetItem.kind === "panel";
+    const panelSeconds = samePanel
+      ? remainingNow(
+          activeRuntime.panelStatus ?? undefined,
+          activeRuntime.panelEndsAt,
+          activeRuntime.panelRemainingSeconds ?? currentItem.durationSeconds,
+        )
+      : targetItem.durationSeconds;
+    const shouldRunPanel = targetItem.kind === "panel" && startSpeaker;
     setRuntime({
       status: startSpeaker ? "running" : "paused",
       segmentIndex: safeIndex,
@@ -180,18 +189,21 @@ export function ControlRoom() {
       endsAt: startSpeaker ? startedAt + target.durationSeconds * 1000 : null,
       panelStatus:
         targetItem.kind === "panel"
-          ? samePanel
-            ? activeRuntime.panelStatus ?? "ready"
-            : "ready"
+          ? shouldRunPanel
+            ? "running"
+            : samePanel
+              ? activeRuntime.panelStatus ?? "ready"
+              : "ready"
           : null,
-      panelRemainingSeconds:
-        targetItem.kind === "panel"
-          ? samePanel
-            ? activeRuntime.panelRemainingSeconds ?? currentItem.durationSeconds
-            : targetItem.durationSeconds
-          : null,
+      panelRemainingSeconds: targetItem.kind === "panel" ? panelSeconds : null,
       panelEndsAt:
-        targetItem.kind === "panel" && samePanel ? activeRuntime.panelEndsAt ?? null : null,
+        shouldRunPanel
+          ? samePanel && activeRuntime.panelStatus === "running"
+            ? activeRuntime.panelEndsAt
+            : startedAt + panelSeconds * 1000
+          : targetItem.kind === "panel" && samePanel
+            ? activeRuntime.panelEndsAt ?? null
+            : null,
     });
   }
 
@@ -301,22 +313,6 @@ export function ControlRoom() {
     }));
   }
 
-  function dropFutureItem(targetId: string) {
-    if (!draggedItemId || draggedItemId === targetId) return;
-    mutateEvent((currentEvent) => {
-      const locked = currentEvent.agenda.slice(0, currentAgendaIndex + 1);
-      const future = currentEvent.agenda.slice(currentAgendaIndex + 1);
-      const sourceIndex = future.findIndex((item) => item.id === draggedItemId);
-      const targetIndex = future.findIndex((item) => item.id === targetId);
-      if (sourceIndex < 0 || targetIndex < 0) return currentEvent;
-      const reordered = [...future];
-      const [moved] = reordered.splice(sourceIndex, 1);
-      reordered.splice(targetIndex, 0, moved);
-      return { ...currentEvent, agenda: [...locked, ...reordered] };
-    });
-    setDraggedItemId(null);
-  }
-
   async function copyLink() {
     await navigator.clipboard.writeText(`${window.location.origin}${viewerPath}`);
     setCopied(true);
@@ -416,6 +412,31 @@ export function ControlRoom() {
             <button onClick={() => adjust(60, isPanel)}>+1m</button>
           </div>
 
+          <div className="part-navigation">
+            <button
+              className="part-nav-button"
+              disabled={!previousPart}
+              onClick={() => handleJumpTo(segmentIndex - 1)}
+            >
+              <SkipBack size={14} />
+              <span>
+                <small>Previous</small>
+                {previousPart?.speaker || "First part"}
+              </span>
+            </button>
+            <button
+              className="part-nav-button next"
+              disabled={!nextPart}
+              onClick={() => handleJumpTo(segmentIndex + 1, true, Date.now())}
+            >
+              <span>
+                <small>Next part</small>
+                {nextPart?.speaker || "Last part"}
+              </span>
+              <SkipForward size={14} />
+            </button>
+          </div>
+
           <div className="share-box">
             <span>Audience link</span>
             <div className="share-row">
@@ -438,26 +459,39 @@ export function ControlRoom() {
             </span>
           </div>
 
-          <div className="editable-run-list">
-            {activeEvent.agenda.map((item, itemIndex) => {
+          <SortableList
+            className="editable-run-list"
+            items={activeEvent.agenda}
+            scope={`live-agenda-${activeEvent.id}`}
+            isItemDisabled={(_, itemIndex) => itemIndex <= currentAgendaIndex}
+            onReorder={(agenda) =>
+              mutateEvent((currentEvent) => ({ ...currentEvent, agenda }))
+            }
+            renderItem={(item, itemIndex, { dragHandleRef, onHandleKeyDown }) => {
               const isPast = itemIndex < currentAgendaIndex;
               const isCurrent = itemIndex === currentAgendaIndex;
               const isFuture = itemIndex > currentAgendaIndex;
               return (
                 <article
-                  key={item.id}
                   className={`editable-run-item ${isCurrent ? "current" : ""} ${
                     isPast ? "past" : ""
                   }`}
-                  draggable={isFuture}
-                  onDragStart={() => isFuture && setDraggedItemId(item.id)}
-                  onDragOver={(dragEvent: DragEvent<HTMLElement>) => {
-                    if (isFuture) dragEvent.preventDefault();
-                  }}
-                  onDrop={() => isFuture && dropFutureItem(item.id)}
                 >
                   <div className="editable-run-index">
-                    {isFuture ? <GripVertical size={16} /> : itemIndex + 1}
+                    {isFuture ? (
+                      <button
+                        className="drag-handle-button compact"
+                        ref={dragHandleRef}
+                        type="button"
+                        aria-label={`Drag ${item.title}`}
+                        title="Drag to reorder, or press Alt + Up/Down"
+                        onKeyDown={onHandleKeyDown}
+                      >
+                        <GripVertical size={16} />
+                      </button>
+                    ) : (
+                      itemIndex + 1
+                    )}
                   </div>
                   <div className="editable-run-content">
                     <div className="editable-run-topline">
@@ -492,15 +526,10 @@ export function ControlRoom() {
                             <option value="panel">Panel</option>
                           </select>
                           <label className="inline-minutes">
-                            <input
-                              className="input"
-                              type="number"
-                              min={1}
-                              value={minutes(item.durationSeconds)}
-                              onChange={(inputEvent) =>
-                                patchAgendaItem(item.id, {
-                                  durationSeconds: Number(inputEvent.target.value) * 60,
-                                })
+                            <DurationInput
+                              seconds={item.durationSeconds}
+                              onSecondsChange={(durationSeconds) =>
+                                patchAgendaItem(item.id, { durationSeconds })
                               }
                             />
                             min total
@@ -518,15 +547,11 @@ export function ControlRoom() {
                             <div className="future-panel-default">
                               <span>Default per panelist</span>
                               <label className="inline-minutes">
-                                <input
-                                  className="input"
-                                  type="number"
-                                  min={1}
-                                  value={minutes(item.speakerDefaultSeconds ?? 5 * 60)}
-                                  onChange={(inputEvent) =>
-                                    patchAgendaItem(item.id, {
-                                      speakerDefaultSeconds: Number(inputEvent.target.value) * 60,
-                                    })
+                                <DurationInput
+                                  seconds={item.speakerDefaultSeconds}
+                                  fallbackMinutes={5}
+                                  onSecondsChange={(speakerDefaultSeconds) =>
+                                    patchAgendaItem(item.id, { speakerDefaultSeconds })
                                   }
                                 />
                                 min
@@ -546,8 +571,35 @@ export function ControlRoom() {
                               </button>
                             </div>
                           )}
-                          {item.speakers.map((speaker) => (
-                            <div className="future-speaker-row" key={speaker.id}>
+                          <SortableList
+                            className="sortable-speaker-list"
+                            items={item.speakers}
+                            scope={`live-panelists-${item.id}`}
+                            onReorder={(speakers) => patchAgendaItem(item.id, { speakers })}
+                            renderItem={(
+                              speaker,
+                              speakerIndex,
+                              { dragHandleRef, onHandleKeyDown },
+                            ) => (
+                            <div
+                              className={`future-speaker-row${
+                                item.kind === "panel" ? " panel" : ""
+                              }`}
+                            >
+                              {item.kind === "panel" && (
+                                <button
+                                  className="drag-handle-button compact"
+                                  ref={dragHandleRef}
+                                  type="button"
+                                  aria-label={`Drag ${
+                                    speaker.name || `panelist ${speakerIndex + 1}`
+                                  }`}
+                                  title="Drag to reorder, or press Alt + Up/Down"
+                                  onKeyDown={onHandleKeyDown}
+                                >
+                                  <GripVertical size={14} />
+                                </button>
+                              )}
                               <input
                                 className="input"
                                 aria-label="Speaker name"
@@ -557,15 +609,10 @@ export function ControlRoom() {
                                 }
                               />
                               <label className="inline-minutes">
-                                <input
-                                  className="input"
-                                  type="number"
-                                  min={1}
-                                  value={minutes(speaker.durationSeconds)}
-                                  onChange={(inputEvent) =>
-                                    patchSpeaker(item, speaker.id, {
-                                      durationSeconds: Number(inputEvent.target.value) * 60,
-                                    })
+                                <DurationInput
+                                  seconds={speaker.durationSeconds}
+                                  onSecondsChange={(durationSeconds) =>
+                                    patchSpeaker(item, speaker.id, { durationSeconds })
                                   }
                                 />
                                 min
@@ -587,7 +634,8 @@ export function ControlRoom() {
                                 </button>
                               )}
                             </div>
-                          ))}
+                            )}
+                          />
                           {item.kind === "panel" && (
                             <button
                               className="ghost-button"
@@ -625,7 +673,6 @@ export function ControlRoom() {
                                 <button
                                   key={speaker.id}
                                   className={speakerIsCurrent ? "active" : ""}
-                                  disabled={activeRuntime.panelStatus === "ready"}
                                   onClick={() => handleJumpTo(speakerIndex, true, Date.now())}
                                 >
                                   <span>{speaker.name}</span>
@@ -644,8 +691,8 @@ export function ControlRoom() {
                   </div>
                 </article>
               );
-            })}
-          </div>
+            }}
+          />
 
           <button
             className="add-item-button"
