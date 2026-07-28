@@ -141,7 +141,7 @@ export function AgendaEditor({
     <TooltipProvider>
       <section
         aria-labelledby="agenda-editor-heading"
-        className="grid gap-3.5 [--panelist-name:300px]"
+        className="grid gap-3.5"
       >
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>

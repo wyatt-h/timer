@@ -71,15 +71,14 @@ export function SortablePanelistRow({
     >
       <div
         /*
-         * Four children, so four tracks. Declaring a fifth left an unfilled
-         * column that absorbed the leftover width and pushed the name field
-         * away from the handle. `justify-start` keeps the row packed left so
-         * the inputs line up with the fields above them.
+         * The name track absorbs the available width on desktop, keeping the
+         * handle and name anchored left while duration and delete stay grouped
+         * against the right edge. Narrow screens retain the wrapped layout.
          */
         className={cn(
-          "grid items-center justify-start gap-x-2 gap-y-2",
+          "grid items-center gap-x-2 gap-y-2",
           "grid-cols-[auto_minmax(0,1fr)_auto]",
-          "sm:grid-cols-[auto_minmax(0,var(--panelist-name))_auto_auto]",
+          "sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]",
         )}
       >
         <DragHandle

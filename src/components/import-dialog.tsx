@@ -74,6 +74,12 @@ export function ImportDialog({ open, onClose, onImport }: ImportDialogProps) {
       ref={dialog}
       aria-labelledby="import-title"
       onCancel={(event) => {
+        /*
+         * A file input emits its own bubbling `cancel` event when the native
+         * picker is dismissed without a selection. Only a cancel originating
+         * from the dialog itself (for example, Escape) should close the modal.
+         */
+        if (event.target !== event.currentTarget) return;
         event.preventDefault();
         onClose();
       }}
