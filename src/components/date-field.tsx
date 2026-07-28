@@ -2,6 +2,7 @@
 
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type DateFieldProps = {
@@ -99,17 +100,23 @@ export function DateField({ id, value, onChange }: DateFieldProps) {
 
   return (
     <div className="relative" ref={wrapper}>
-      <button
-        className="flex h-11 w-full cursor-pointer items-center gap-2.5 rounded-field border border-line bg-surface-raised px-3 text-left text-[13px] text-ink transition-[border-color,background-color,box-shadow] duration-150 hover:border-violet/30 hover:bg-white focus-visible:border-violet/50 focus-visible:ring-[3px] focus-visible:ring-violet/20 focus-visible:outline-none"
+      <Input
         id={id}
-        type="button"
+        className="cursor-pointer"
+        label="Date"
+        value={label}
+        readOnly
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => (open ? setOpen(false) : openCalendar())}
       >
-        <CalendarDays size={14} aria-hidden className="shrink-0 text-text-subtle" />
-        <span className={parsed ? "" : "text-text-subtle/75"}>{label}</span>
-      </button>
+        <CalendarDays
+          slot="leading-icon"
+          size={17}
+          aria-hidden
+          className="text-text-subtle"
+        />
+      </Input>
 
       {open && (
         <div role="dialog" aria-label="Choose a date" className="absolute top-[calc(100%+0.375rem)] left-0 z-40 w-[268px] rounded-card border border-line bg-white p-3.5 shadow-[0_18px_44px_rgba(20,16,38,0.16)] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-150">

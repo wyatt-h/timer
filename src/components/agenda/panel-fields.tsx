@@ -20,7 +20,6 @@ import { Plus, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { DurationField, FieldError } from "@/components/agenda/fields";
 import { SortablePanelistRow } from "@/components/agenda/sortable-panelist-row";
 import type { PanelistValues } from "@/lib/agenda-schema";
@@ -100,34 +99,31 @@ export function PanelFields({
     <div className="grid gap-3">
       <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
         <div className="min-w-0">
-          <Label htmlFor={hostId}>Panel host</Label>
           <Input
             id={hostId}
-            className="mt-1 h-10"
+            className="material-outlined-field--compact"
+            label="Panel host"
             placeholder="Who runs this panel"
             value={host}
             aria-invalid={errors.host ? true : undefined}
             aria-describedby={errors.host ? `${hostId}-error` : undefined}
-            onChange={(event) => onHostChange(event.target.value)}
+            onValueChange={onHostChange}
             onBlur={onBlur}
           />
           <FieldError id={`${hostId}-error`}>{errors.host}</FieldError>
         </div>
 
         <div>
-          <Label htmlFor={durationId}>Panel total</Label>
-          <div className="mt-1 flex items-center gap-2">
-            <DurationField
-              id={durationId}
-              className="h-10 w-[86px]"
-              value={durationMinutes}
-              invalid={Boolean(errors.duration)}
-              aria-describedby={errors.duration ? `${durationId}-error` : undefined}
-              onChange={onDurationChange}
-              onBlur={onBlur}
-            />
-            <span className="text-[12px] text-text-subtle">min</span>
-          </div>
+          <DurationField
+            id={durationId}
+            label="Panel total"
+            suffixText="min"
+            value={durationMinutes}
+            invalid={Boolean(errors.duration)}
+            aria-describedby={errors.duration ? `${durationId}-error` : undefined}
+            onChange={onDurationChange}
+            onBlur={onBlur}
+          />
           <FieldError id={`${durationId}-error`}>{errors.duration}</FieldError>
         </div>
       </div>
@@ -142,17 +138,16 @@ export function PanelFields({
       >
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-1">
           <div>
-            <Label htmlFor={defaultId}>Default per panelist</Label>
-            <div className="mt-1 flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <DurationField
                 id={defaultId}
-                className="h-9 w-[74px] bg-white"
+                label="Default per panelist"
+                suffixText="min"
                 value={defaultPanelistMinutes}
                 invalid={Boolean(errors.defaultMinutes)}
                 onChange={onDefaultMinutesChange}
                 onBlur={onBlur}
               />
-              <span className="text-[12px] text-text-subtle">min</span>
               <Button
                 type="button"
                 variant="secondary"

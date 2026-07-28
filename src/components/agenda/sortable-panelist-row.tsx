@@ -90,13 +90,14 @@ export function SortablePanelistRow({
 
         <div className="min-w-0">
           <Input
+            label={`Panelist ${index + 1}`}
             aria-label={`Name of panelist ${index + 1}`}
             aria-invalid={nameError ? true : undefined}
             aria-describedby={nameErrorId}
-            className="h-9"
+            className="material-outlined-field--compact"
             placeholder={`Panelist ${index + 1}`}
             value={name}
-            onChange={(event) => onNameChange(event.target.value)}
+            onValueChange={onNameChange}
             onBlur={onBlur}
           />
         </div>
@@ -131,17 +132,17 @@ export function SortablePanelistRow({
           </Tooltip>
         </div>
 
-        <div className="col-start-2 flex items-center gap-2 sm:col-start-auto">
+        <div className="col-start-2 sm:col-start-auto">
           <DurationField
+            label="Minutes"
             aria-label={`Minutes for ${label}`}
             aria-describedby={durationErrorId}
             invalid={Boolean(durationError)}
-            className="h-9 w-[74px]"
             value={durationMinutes}
+            suffixText="min"
             onChange={onDurationChange}
             onBlur={onBlur}
           />
-          <span className="text-[12px] text-text-subtle">min</span>
         </div>
       </div>
 

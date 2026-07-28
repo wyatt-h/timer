@@ -3,7 +3,7 @@
 import * as React from "react";
 import { GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
+import { Input, type InputProps } from "@/components/ui/input";
 
 /**
  * Whole-minute input.
@@ -19,7 +19,7 @@ export function DurationField({
   invalid,
   className,
   ...props
-}: Omit<React.ComponentProps<typeof Input>, "value" | "onChange" | "type"> & {
+}: Omit<InputProps, "value" | "onValueChange" | "type"> & {
   value: number;
   onChange: (minutes: number) => void;
   invalid?: boolean;
@@ -31,26 +31,25 @@ export function DurationField({
       {...props}
       type="number"
       inputMode="numeric"
-      min={1}
-      step={1}
+      min="1"
+      step="1"
       aria-invalid={invalid || undefined}
-      className={cn("tabular text-center", className)}
+      className={cn("material-outlined-field--minutes tabular", className)}
       value={draft ?? String(Number.isFinite(value) ? value : "")}
-      onFocus={(event) => {
+      onFocus={() => {
         setDraft(String(Number.isFinite(value) ? value : ""));
-        props.onFocus?.(event);
+        props.onFocus?.();
       }}
-      onChange={(event) => {
-        const next = event.target.value;
+      onValueChange={(next) => {
         setDraft(next);
         const parsed = Number(next);
         if (next.trim() && Number.isFinite(parsed)) onChange(parsed);
       }}
-      onBlur={(event) => {
+      onBlur={() => {
         const parsed = Number(draft);
         onChange(draft?.trim() && Number.isFinite(parsed) ? Math.round(parsed) : value);
         setDraft(null);
-        onBlur?.(event);
+        onBlur?.();
       }}
     />
   );

@@ -1,6 +1,5 @@
 "use client";
 
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { DurationField, FieldError } from "@/components/agenda/fields";
 
@@ -39,34 +38,31 @@ export function SpeakerFields({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 rounded-card border border-line-soft bg-surface-sunken p-3">
       <div className="min-w-0 max-w-[360px]">
-        <Label htmlFor={nameId}>Speaker</Label>
         <Input
           id={nameId}
-          className="mt-1 h-10 bg-white"
+          className="material-outlined-field--compact"
+          label="Speaker"
           placeholder="Who is speaking"
           value={name}
           aria-invalid={nameError ? true : undefined}
           aria-describedby={nameError ? `${nameId}-error` : undefined}
-          onChange={(event) => onNameChange(event.target.value)}
+          onValueChange={onNameChange}
           onBlur={onBlur}
         />
         <FieldError id={`${nameId}-error`}>{nameError}</FieldError>
       </div>
 
       <div className="justify-self-end">
-        <Label htmlFor={durationId}>Duration</Label>
-        <div className="mt-1 flex items-center gap-2">
-          <DurationField
-            id={durationId}
-            className="h-10 w-[86px]"
-            value={durationMinutes}
-            invalid={Boolean(durationError)}
-            aria-describedby={durationError ? `${durationId}-error` : undefined}
-            onChange={onDurationChange}
-            onBlur={onBlur}
-          />
-          <span className="text-[12px] text-text-subtle">min</span>
-        </div>
+        <DurationField
+          id={durationId}
+          label="Duration"
+          suffixText="min"
+          value={durationMinutes}
+          invalid={Boolean(durationError)}
+          aria-describedby={durationError ? `${durationId}-error` : undefined}
+          onChange={onDurationChange}
+          onBlur={onBlur}
+        />
         <FieldError id={`${durationId}-error`}>{durationError}</FieldError>
       </div>
     </div>

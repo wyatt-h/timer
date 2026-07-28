@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ensureWorkspace, isValidTeamSlug, sanitizeTeamSlug } from "@/lib/store";
 
 export default function Home() {
@@ -51,24 +52,20 @@ export default function Home() {
           className="w-[min(100%,470px)] rounded-[22px] border border-ink/8 bg-white/80 p-[18px] text-left shadow-[0_22px_70px_rgba(31,26,50,0.08),inset_0_1px_rgba(255,255,255,0.9)] backdrop-blur-2xl"
         >
           <div className="flex gap-2">
-            <div className="flex min-w-0 flex-1 items-center overflow-hidden rounded-[13px] border border-ink/10 bg-white transition-[border-color,box-shadow] duration-150 focus-within:border-violet/55 focus-within:ring-4 focus-within:ring-violet/10">
-              <input
-                id="team-name"
-                value={team}
-                onChange={(event) => {
-                  setTeam(sanitizeTeamSlug(event.target.value));
-                  setTouched(false);
-                }}
-                onBlur={() => setTouched(true)}
-                placeholder="Your team name"
-                aria-label="Team name"
-                autoComplete="organization"
-                autoCapitalize="none"
-                spellCheck={false}
-                aria-describedby="team-hint"
-                className="h-[49px] w-full min-w-0 border-0 bg-transparent px-4 text-[14px] font-semibold text-[#242429] outline-none placeholder:font-normal placeholder:text-text-subtle/70"
-              />
-            </div>
+            <Input
+              id="team-name"
+              className="min-w-0 flex-1"
+              label="Team name"
+              value={team}
+              onValueChange={(value) => {
+                setTeam(sanitizeTeamSlug(value));
+                setTouched(false);
+              }}
+              onBlur={() => setTouched(true)}
+              placeholder="Your team name"
+              autoComplete="organization"
+              aria-describedby="team-hint"
+            />
             <Button
               type="submit"
               variant="primary"

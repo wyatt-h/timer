@@ -7,7 +7,6 @@ import { useSearchParams } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 function LoginForm() {
@@ -59,15 +58,13 @@ function LoginForm() {
             </div>
           ) : (
             <>
-              <Label htmlFor="email" className="mb-1.5 block">
-                Email address
-              </Label>
               <Input
                 id="email"
+                label="Email address"
                 type="email"
                 required
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onValueChange={setEmail}
                 placeholder="you@company.com"
                 aria-label="Email address"
               />

@@ -114,6 +114,68 @@
   }
 }
 
+@layer components {
+  /*
+   * Google Material Web owns the label motion, notch and state transitions.
+   * These public tokens only adapt the official component to Aura's palette
+   * and field shape; its interaction model stays untouched.
+   */
+  .material-outlined-field {
+    --md-sys-color-primary: var(--color-violet);
+    --md-sys-color-error: var(--color-over);
+    --md-outlined-text-field-container-shape: var(--radius-field);
+    --md-outlined-text-field-outline-color: var(--color-line);
+    --md-outlined-text-field-hover-outline-color: rgb(119 87 237 / 30%);
+    --md-outlined-text-field-focus-outline-color: var(--color-violet);
+    --md-outlined-text-field-error-outline-color: rgb(190 54 54 / 55%);
+    --md-outlined-text-field-error-focus-outline-color: var(--color-over);
+    --md-outlined-text-field-error-label-text-color: var(--color-over);
+    --md-outlined-text-field-error-focus-label-text-color: var(--color-over);
+    --md-outlined-text-field-error-supporting-text-color: var(--color-over);
+    --md-outlined-text-field-input-text-color: var(--color-ink);
+    --md-outlined-text-field-label-text-color: var(--color-text-muted);
+    --md-outlined-text-field-focus-label-text-color: var(--color-violet-dark);
+    --md-outlined-text-field-input-text-font: var(--font-sans);
+    --md-outlined-text-field-label-text-font: var(--font-sans);
+    --md-outlined-text-field-input-text-size: 13px;
+    --md-outlined-text-field-label-text-size: 13px;
+    --md-outlined-text-field-label-text-populated-size: 11px;
+    --md-outlined-text-field-input-text-suffix-color: var(--color-text-subtle);
+    --md-outlined-text-field-leading-space: 13px;
+    --md-outlined-text-field-trailing-space: 13px;
+    --md-outlined-text-field-top-space: 12px;
+    --md-outlined-text-field-bottom-space: 12px;
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .material-outlined-field--compact {
+    --md-outlined-text-field-top-space: 10px;
+    --md-outlined-text-field-bottom-space: 10px;
+  }
+
+  .material-outlined-field--host {
+    width: min(100%, 320px);
+  }
+
+  .material-outlined-field--duration {
+    width: 190px;
+  }
+
+  .material-outlined-field--minutes {
+    width: 118px;
+  }
+
+  .material-outlined-field--search {
+    width: min(100%, 230px);
+  }
+
+  .material-outlined-field:focus-visible {
+    outline: none;
+  }
+}
+
 @layer utilities {
   /* Durations line up column-wise instead of jittering as digits change. */
   .tabular {

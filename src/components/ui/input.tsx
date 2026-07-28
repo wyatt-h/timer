@@ -1,27 +1,50 @@
 "use client";
 
 import * as React from "react";
+import {
+  MaterialOutlinedField,
+  type MaterialOutlinedFieldProps,
+  type MaterialTextFieldElement,
+} from "@/components/material-outlined-field";
 import { cn } from "@/lib/utils";
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
-  return (
-    <input
-      type={type}
-      data-slot="input"
-      className={cn(
-        "h-11 w-full min-w-0 rounded-field border border-line bg-surface-raised px-3 text-[13px] text-ink outline-none transition-[color,background-color,border-color,box-shadow] duration-150 ease-[var(--ease-snap)]",
-        "placeholder:text-text-subtle/75",
-        "hover:not-focus:border-violet/30 hover:not-focus:bg-white",
-        "focus-visible:border-violet/50 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-violet/20",
-        /* Invalid state is carried by border, tint and an adjacent message —
-           never by colour alone. */
-        "aria-invalid:border-over/55 aria-invalid:bg-over-soft aria-invalid:focus-visible:ring-over/20",
-        "disabled:cursor-not-allowed disabled:opacity-55",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+export type InputProps = Omit<
+  MaterialOutlinedFieldProps,
+  "ariaLabel" | "ariaDescribedBy" | "ariaHasPopup" | "ariaExpanded" | "invalid"
+> & {
+  "aria-label"?: string;
+  "aria-describedby"?: string;
+  "aria-haspopup"?: React.AriaAttributes["aria-haspopup"];
+  "aria-expanded"?: boolean;
+  "aria-invalid"?: boolean;
+};
 
-export { Input };
+export const Input = React.forwardRef<MaterialTextFieldElement, InputProps>(
+  function Input(
+    {
+      className,
+      label,
+      "aria-label": ariaLabel,
+      "aria-describedby": ariaDescribedBy,
+      "aria-haspopup": ariaHasPopup,
+      "aria-expanded": ariaExpanded,
+      "aria-invalid": invalid,
+      ...props
+    },
+    ref,
+  ) {
+    return (
+      <MaterialOutlinedField
+        ref={ref}
+        className={cn("material-outlined-field", className)}
+        label={label}
+        ariaLabel={ariaLabel}
+        ariaDescribedBy={ariaDescribedBy}
+        ariaHasPopup={ariaHasPopup}
+        ariaExpanded={ariaExpanded}
+        invalid={Boolean(invalid)}
+        {...props}
+      />
+    );
+  },
+);

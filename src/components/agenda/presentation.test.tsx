@@ -64,9 +64,10 @@ describe("agenda item presentation", () => {
     );
 
     expect(screen.getByLabelText("Speaker")).toBeInTheDocument();
-    expect(screen.getByLabelText("Duration")).toBeInTheDocument();
-    /* The unit sits beside the field rather than inside the label. */
-    expect(styled(screen.getByText("min"))).toBe(true);
+    const duration = screen.getByLabelText("Duration");
+    expect(duration).toBeInTheDocument();
+    /* Material Web owns the unit as the field's suffix. */
+    expect(duration).toHaveAttribute("suffixtext", "min");
   });
 
   it("marks an invalid field for assistive tech, not just visually", () => {

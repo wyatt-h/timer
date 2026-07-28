@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
-type DurationInputProps = Omit<
-  React.InputHTMLAttributes<HTMLInputElement>,
-  "onChange" | "type" | "value"
-> & {
+type DurationInputProps = {
   seconds: number | undefined;
   onSecondsChange: (seconds: number) => void;
   minimumMinutes?: number;
   fallbackMinutes?: number;
+  className?: string;
+  label?: string;
+  "aria-label"?: string;
 };
 
 function toMinutes(seconds: number | undefined, minimumMinutes: number, fallbackMinutes: number) {
@@ -23,7 +23,8 @@ export function DurationInput({
   minimumMinutes = 1,
   fallbackMinutes = minimumMinutes,
   className,
-  ...inputProps
+  label = "Minutes",
+  "aria-label": ariaLabel,
 }: DurationInputProps) {
   const [value, setValue] = useState(() =>
     toMinutes(seconds, minimumMinutes, fallbackMinutes),
@@ -41,39 +42,30 @@ export function DurationInput({
   }
 
   return (
-    <input
-      {...inputProps}
-      className={cn(
-        /*
-         * Sized here rather than by the caller: this only ever holds two or
-         * three digits, and letting it stretch was what left minute fields
-         * marooned from their "min" label.
-         */
-        "tabular h-9 w-[74px] rounded-field border border-line bg-surface-raised px-2 text-center text-[13px] text-ink outline-none",
-        "transition-[border-color,box-shadow] duration-150",
-        "hover:not-focus:border-violet/30 hover:not-focus:bg-white",
-        "focus-visible:border-violet/50 focus-visible:bg-white focus-visible:ring-[3px] focus-visible:ring-violet/20",
-        className,
-      )}
+    <Input
+      className={className ?? "material-outlined-field--minutes"}
+      label={label}
+      aria-label={ariaLabel}
       inputMode="decimal"
-      min={minimumMinutes}
-      step={1}
+      min={String(minimumMinutes)}
+      step="1"
       type="number"
+      noSpinner
+      suffixText="min"
       value={isEditing ? value : toMinutes(seconds, minimumMinutes, fallbackMinutes)}
       onFocus={() => {
         setValue(toMinutes(seconds, minimumMinutes, fallbackMinutes));
         setIsEditing(true);
       }}
-      onChange={(event) => {
-        const nextValue = event.target.value;
+      onValueChange={(nextValue) => {
         setValue(nextValue);
         if (nextValue.trim() && Number(nextValue) >= minimumMinutes) {
           onSecondsChange(Math.round(Number(nextValue) * 60));
         }
       }}
-      onBlur={(event) => {
+      onBlur={() => {
         setIsEditing(false);
-        commit(event.target.value);
+        commit(value);
       }}
     />
   );

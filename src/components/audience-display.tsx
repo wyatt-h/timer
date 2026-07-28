@@ -1,6 +1,15 @@
 "use client";
 
-import { Maximize2, Minimize2, Volume2, VolumeX } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Maximize2,
+  Minimize2,
+  Music2,
+  Play,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
@@ -16,7 +25,13 @@ import {
   timerTone,
 } from "@/lib/format";
 import { usePublicEvent } from "@/lib/store";
-import { CHIME_SECONDS, useChime } from "@/lib/use-chime";
+import {
+  CHIME_PRESETS,
+  CHIME_SECONDS,
+  isChimePreset,
+  useChime,
+  type ChimePreset,
+} from "@/lib/use-chime";
 import { cn } from "@/lib/utils";
 import { useWakeLock } from "@/lib/use-wake-lock";
 
@@ -30,6 +45,20 @@ function liveSeconds(
   return fallback ?? 0;
 }
 
+const AUDIENCE_BACKGROUND = {
+  backgroundColor: "#0c0c10",
+  backgroundImage:
+    "radial-gradient(circle at 50% 45%, rgba(119, 87, 237, 0.15), transparent 34%)",
+};
+
+const AUDIENCE_OVER_BACKGROUND = {
+  backgroundColor: "#120b0d",
+  backgroundImage:
+    "radial-gradient(circle at 50% 45%, rgba(207, 52, 52, 0.2), transparent 38%)",
+};
+
+const CHIME_STORAGE_KEY = "timer:audience-chime";
+
 export function AudienceDisplay() {
   const params = useParams<{ token: string }>();
   const result = usePublicEvent(params.token);
@@ -39,12 +68,40 @@ export function AudienceDisplay() {
   const [remaining, setRemaining] = useState(runtime?.remainingSeconds ?? 0);
   const [panelRemaining, setPanelRemaining] = useState(runtime?.panelRemainingSeconds ?? 0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { play, unlock, isReady } = useChime();
+  const { play, unlock, disable, isReady } = useChime();
   const soundAllowed = isSoundEnabled(runtime ?? {});
+  const [chimePreset, setChimePreset] = useState<ChimePreset>("feather");
+  const [soundPickerOpen, setSoundPickerOpen] = useState(false);
+  const soundPicker = useRef<HTMLDivElement>(null);
   const [alerting, setAlerting] = useState(false);
   const alertTimeout = useRef<number | null>(null);
 
   useWakeLock();
+
+  useEffect(() => {
+    const storedPreset = window.localStorage.getItem(CHIME_STORAGE_KEY);
+    if (isChimePreset(storedPreset)) {
+      queueMicrotask(() => setChimePreset(storedPreset));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!soundPickerOpen) return;
+    function closePicker(event: MouseEvent) {
+      if (!soundPicker.current?.contains(event.target as Node)) {
+        setSoundPickerOpen(false);
+      }
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setSoundPickerOpen(false);
+    }
+    document.addEventListener("mousedown", closePicker);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closePicker);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [soundPickerOpen]);
 
   useEffect(() => {
     const sync = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -107,9 +164,9 @@ export function AudienceDisplay() {
         const speaker = liveItem?.speakers.find((entry) => entry.id === liveSegment?.id);
         if (!chimed.current.has(speakerKey)) {
           chimed.current.add(speakerKey);
-          if (soundAllowed && !isSpeakerMuted(speaker)) {
-            play();
-            raiseAlert();
+          raiseAlert();
+          if (soundAllowed && isReady && !isSpeakerMuted(speaker)) {
+            void play(chimePreset);
           }
         }
       } else if (speakerSeconds > 0) {
@@ -120,9 +177,9 @@ export function AudienceDisplay() {
       if (runtime.panelStatus === "running" && panelSeconds <= 0) {
         if (!chimed.current.has(panelKey)) {
           chimed.current.add(panelKey);
-          if (soundAllowed && liveItem && !isPanelMuted(liveItem)) {
-            play();
-            raiseAlert();
+          raiseAlert();
+          if (soundAllowed && isReady && liveItem && !isPanelMuted(liveItem)) {
+            void play(chimePreset);
           }
         }
       } else if (panelSeconds > 0) {
@@ -132,7 +189,33 @@ export function AudienceDisplay() {
     tick();
     const interval = window.setInterval(tick, 200);
     return () => window.clearInterval(interval);
-  }, [event, play, raiseAlert, runtime, segments, soundAllowed]);
+  }, [
+    chimePreset,
+    event,
+    isReady,
+    play,
+    raiseAlert,
+    runtime,
+    segments,
+    soundAllowed,
+  ]);
+
+  const previewChime = useCallback(
+    async (preset: ChimePreset) => {
+      const ready = isReady || (await unlock());
+      if (ready) await play(preset);
+    },
+    [isReady, play, unlock],
+  );
+
+  const chooseChime = useCallback(
+    (preset: ChimePreset) => {
+      setChimePreset(preset);
+      window.localStorage.setItem(CHIME_STORAGE_KEY, preset);
+      void previewChime(preset);
+    },
+    [previewChime],
+  );
 
   const toggleFullscreen = useCallback(async () => {
     if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
@@ -150,7 +233,10 @@ export function AudienceDisplay() {
 
   if (!result || !event || !runtime || !segments.length) {
     return (
-      <main className="relative flex min-h-svh flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_45%,rgba(119,87,237,0.15),transparent_34%),#0c0c10] p-[clamp(1.375rem,4vw,3.5rem)] text-[#f8f7fc]">
+      <main
+        className="relative flex min-h-svh flex-col overflow-hidden p-[clamp(1.375rem,4vw,3.5rem)] text-[#f8f7fc]"
+        style={AUDIENCE_BACKGROUND}
+      >
         <header className="relative z-2 flex items-center justify-between text-[12px] text-[#8f8e99]">
           <BrandMark light />
         </header>
@@ -179,6 +265,9 @@ export function AudienceDisplay() {
   const speakerTone = timerTone(remaining, current.durationSeconds);
   const panelTone = timerTone(panelRemaining, currentItem?.durationSeconds ?? 0);
   const speakerProgress = elapsedRatio(remaining, current.durationSeconds);
+  const selectedChime =
+    CHIME_PRESETS.find((preset) => preset.id === chimePreset) ??
+    CHIME_PRESETS[0];
 
   const stateLabel = isPaused
     ? "Paused"
@@ -190,12 +279,12 @@ export function AudienceDisplay() {
 
   return (
     <main
-      className={cn(
-        "relative flex min-h-svh flex-col overflow-hidden p-[clamp(1.375rem,4vw,3.5rem)] text-[#f8f7fc]",
-        "bg-[radial-gradient(circle_at_50%_45%,rgba(119,87,237,0.15),transparent_34%),#0c0c10]",
-        speakerTone === "over" &&
-          "bg-[radial-gradient(circle_at_50%_45%,rgba(207,52,52,0.2),transparent_38%),#120b0d]",
-      )}
+      className="relative flex min-h-svh flex-col overflow-hidden p-[clamp(1.375rem,4vw,3.5rem)] text-[#f8f7fc]"
+      style={
+        speakerTone === "over"
+          ? AUDIENCE_OVER_BACKGROUND
+          : AUDIENCE_BACKGROUND
+      }
     >
       {/*
         * Fires with the chime and for the same duration, so a display with
@@ -210,7 +299,7 @@ export function AudienceDisplay() {
 
       <header className="relative z-2 flex items-center justify-between text-[12px] text-[#8f8e99]">
         <BrandMark light />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {/*
             * Browsers block audio until the page has been interacted with, so
             * the alert cannot arm itself. Prompting once here is the honest
@@ -232,17 +321,112 @@ export function AudienceDisplay() {
               Sound off
             </span>
           ) : isReady ? (
-            <span className="inline-flex min-h-[38px] cursor-default items-center gap-2 rounded-field border border-[#4ade80]/50 bg-[#4ade80]/15 px-3 text-[12px] font-semibold text-[#4ade80]">
+            <button
+              className="inline-flex min-h-[38px] items-center gap-2 rounded-field border border-[#4ade80]/50 bg-[#4ade80]/15 px-3 text-[12px] font-semibold text-[#4ade80] transition-colors duration-150 hover:bg-[#4ade80]/22 hover:text-[#6cf09d]"
+              onClick={() => void disable()}
+              aria-pressed="true"
+              title="Turn sound off on this display"
+            >
               <span aria-hidden className="size-[7px] rounded-full bg-[#4ade80] shadow-[0_0_0_3px_rgba(74,222,128,0.22)] motion-safe:animate-pulse" />
               <Volume2 size={14} />
               Sound on
-            </span>
+            </button>
           ) : (
-            <button className="inline-flex min-h-[38px] items-center gap-2 rounded-field border border-[#9b83f5]/50 bg-violet/20 px-3 text-[12px] font-semibold text-[#cdc2ff] transition-colors duration-150 hover:bg-violet/32 hover:text-white" onClick={() => void unlock()}>
+            <button className="inline-flex min-h-[38px] items-center gap-2 rounded-field border border-[#9b83f5]/50 bg-violet/20 px-3 text-[12px] font-semibold text-[#cdc2ff] transition-colors duration-150 hover:bg-violet/32 hover:text-white" onClick={() => void unlock()} aria-pressed="false">
               <VolumeX size={14} />
               Tap to enable sound
             </button>
           )}
+          <div className="relative" ref={soundPicker}>
+            <button
+              className="inline-flex min-h-[38px] items-center gap-2 rounded-field border border-white/12 bg-white/4 px-3 text-[12px] font-semibold text-[#b9b8c4] transition-colors duration-150 hover:bg-white/9 hover:text-[#f2f1f8]"
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={soundPickerOpen}
+              aria-label={`Choose alarm sound. Current: ${selectedChime.label}`}
+              onClick={() => setSoundPickerOpen((open) => !open)}
+            >
+              <Music2 size={14} aria-hidden />
+              <span className="max-sm:hidden">{selectedChime.label}</span>
+              <ChevronDown
+                size={13}
+                aria-hidden
+                className={cn(
+                  "transition-transform duration-150",
+                  soundPickerOpen && "rotate-180",
+                )}
+              />
+            </button>
+
+            {soundPickerOpen && (
+              <div
+                role="dialog"
+                aria-label="Alarm sound"
+                className="absolute top-[calc(100%+0.5rem)] right-0 z-20 w-[min(330px,calc(100vw-2.75rem))] rounded-card border border-white/12 bg-[#18171f]/98 p-2.5 text-left shadow-[0_18px_50px_rgba(0,0,0,0.42)] backdrop-blur-xl"
+              >
+                <div className="px-2 pt-1 pb-2">
+                  <strong className="block text-[13px] font-semibold text-white">
+                    Alarm sound
+                  </strong>
+                  <span className="mt-0.5 block text-[11px] text-[#92909d]">
+                    Select a sound or replay it with the preview button.
+                  </span>
+                </div>
+                <div className="grid gap-1">
+                  {CHIME_PRESETS.map((preset) => {
+                    const selected = preset.id === chimePreset;
+                    return (
+                      <div
+                        key={preset.id}
+                        className={cn(
+                          "grid grid-cols-[minmax(0,1fr)_2.5rem] items-center rounded-[11px] border border-transparent transition-colors duration-150",
+                          selected
+                            ? "border-violet/35 bg-violet/15"
+                            : "hover:bg-white/5",
+                        )}
+                      >
+                        <button
+                          type="button"
+                          className="grid min-w-0 grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-2.5 px-2.5 py-2 text-left"
+                          aria-label={`Select ${preset.label}`}
+                          aria-pressed={selected}
+                          onClick={() => chooseChime(preset.id)}
+                        >
+                          <span
+                            className={cn(
+                              "grid size-5 place-items-center rounded-full border",
+                              selected
+                                ? "border-violet bg-violet text-white"
+                                : "border-white/15 text-transparent",
+                            )}
+                            aria-hidden
+                          >
+                            <Check size={12} />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-[12px] font-semibold text-[#f4f3f8]">
+                              {preset.label}
+                            </span>
+                            <span className="mt-0.5 block text-[11px] leading-snug text-[#92909d]">
+                              {preset.description}
+                            </span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="grid size-9 place-items-center rounded-[9px] text-[#b9b8c4] transition-colors duration-150 hover:bg-white/8 hover:text-white"
+                          aria-label={`Preview ${preset.label}`}
+                          onClick={() => void previewChime(preset.id)}
+                        >
+                          <Play size={13} fill="currentColor" aria-hidden />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
           <button onClick={toggleFullscreen} className="inline-flex min-h-[38px] items-center gap-2 rounded-field border border-white/12 bg-white/4 px-3 text-[12px] font-semibold text-[#b9b8c4] transition-colors duration-150 hover:bg-white/9 hover:text-[#f2f1f8]">
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
@@ -252,7 +436,7 @@ export function AudienceDisplay() {
 
       <section className={cn("relative z-2 flex flex-1 flex-col items-center justify-center gap-[clamp(0.75rem,2vw,1.375rem)] py-[clamp(0.75rem,2.5vh,2rem)] text-center", isPanel && "has-panel-total")}>
         <span className="text-[12px] font-bold tracking-[0.14em] text-[#8d77e9] uppercase">{stateLabel}</span>
-        <h1 className="text-[clamp(2.125rem,5.5vw,4.5rem)] leading-none font-semibold tracking-[-0.058em]">{current.speaker}</h1>
+        <h1 className="text-[clamp(2.125rem,5.5vw,4.5rem)] leading-none font-semibold tracking-[-0.025em]">{current.speaker}</h1>
         {isPanel && currentItem && (
           <p className="text-[clamp(0.9375rem,2vw,1.375rem)] text-[#9c9ba5]">{panelLabel(currentItem)}</p>
         )}

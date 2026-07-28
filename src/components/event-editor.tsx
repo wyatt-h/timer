@@ -9,7 +9,7 @@ import { AgendaEditor } from "@/components/agenda/agenda-editor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import type { MaterialTextFieldElement } from "@/components/material-outlined-field";
 import { formatDuration } from "@/lib/format";
 import { makeEvent, useWorkspace } from "@/lib/store";
 import { agendaFormSchema, type AgendaFormValues } from "@/lib/agenda-schema";
@@ -21,6 +21,8 @@ function editorSnapshot(name: string, date: string, agenda: AgendaFormValues) {
   return JSON.stringify({ name, date, agendaItems: agenda.agendaItems });
 }
 
+const EMPTY_AGENDA: AgendaFormValues = { agendaItems: [] };
+
 export function EventEditor() {
   const params = useParams<{ team: string; eventId?: string }>();
   const router = useRouter();
@@ -29,25 +31,29 @@ export function EventEditor() {
   const { workspace, update } = useWorkspace(team);
   const existing = workspace?.events.find((event) => event.id === eventId);
 
-  const [draft, setDraft] = useState<TimerEvent>(() => makeEvent("New event"));
+  const [draft, setDraft] = useState<TimerEvent | null>(null);
   const [agenda, setAgenda] = useState<AgendaFormValues | null>(null);
   const [hydratedId, setHydratedId] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
   const [saveNoticeVisible, setSaveNoticeVisible] = useState(false);
-  const nameField = useRef<HTMLInputElement>(null);
+  const nameField = useRef<MaterialTextFieldElement>(null);
   const saveNoticeTimer = useRef<number | null>(null);
   const isEditing = Boolean(eventId);
 
   useEffect(() => {
-    if (!eventId || !existing || hydratedId === eventId) return;
+    if (eventId && (!existing || hydratedId === eventId)) return;
+    if (!eventId && hydratedId === "new") return;
+
     queueMicrotask(() => {
-      const storedDraft = structuredClone(existing);
-      const storedAgenda = toFormValues(existing.agenda);
+      const storedDraft = existing
+        ? structuredClone(existing)
+        : makeEvent("New event");
+      const storedAgenda = toFormValues(storedDraft.agenda);
       setDraft(storedDraft);
       setAgenda(storedAgenda);
       setSavedSnapshot(editorSnapshot(storedDraft.name, storedDraft.date, storedAgenda));
-      setHydratedId(eventId);
+      setHydratedId(eventId ?? "new");
     });
   }, [eventId, existing, hydratedId]);
 
@@ -66,25 +72,19 @@ export function EventEditor() {
    * seed from the stored event stands in.
    */
   const currentAgenda = useMemo(
-    () => agenda ?? toFormValues(draft.agenda),
-    [agenda, draft.agenda],
+    () => agenda ?? (draft ? toFormValues(draft.agenda) : EMPTY_AGENDA),
+    [agenda, draft],
   );
   const currentSnapshot = useMemo(
-    () => editorSnapshot(draft.name, draft.date, currentAgenda),
-    [draft.name, draft.date, currentAgenda],
+    () => draft ? editorSnapshot(draft.name, draft.date, currentAgenda) : null,
+    [draft, currentAgenda],
   );
   const hasUnsavedChanges =
-    savedSnapshot !== null && currentSnapshot !== savedSnapshot;
+    savedSnapshot !== null &&
+    currentSnapshot !== null &&
+    currentSnapshot !== savedSnapshot;
 
-  /* Mounting the editor with a changing key would reset it mid-edit, so the
-     initial values are captured once per hydrated event. */
-  const initialAgenda = useMemo(
-    () => toFormValues(existing?.agenda ?? draft.agenda),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hydratedId],
-  );
-
-  const nameError = draft.name.trim() ? "" : "Give the event a name before saving.";
+  const nameError = draft?.name.trim() ? "" : "Give the event a name before saving.";
   const agendaResult = agendaFormSchema.safeParse(currentAgenda);
 
   function hideSaveNotice() {
@@ -107,6 +107,7 @@ export function EventEditor() {
   }
 
   function save(start = false) {
+    if (!draft) return;
     if (nameError) {
       setShowErrors(true);
       nameField.current?.focus();
@@ -166,10 +167,50 @@ export function EventEditor() {
     router.push(start ? `/t/${team}/events/${next.id}` : `/t/${team}`);
   }
 
+  function handlePrimaryAction() {
+    if (!draft) return;
+
+    /*
+     * "Return to control" is navigation, not a second save action. Keeping it
+     * independent means an unfinished edit cannot silently block both return
+     * buttons; Save changes remains the explicit way to persist editor data.
+     */
+    if (draft.status === "live") {
+      router.push(`/t/${team}/events/${draft.id}`);
+      return;
+    }
+
+    save(true);
+  }
+
   const programmeSeconds = currentAgenda.agendaItems.reduce(
     (sum, item) => sum + item.durationMinutes * 60,
     0,
   );
+
+  /*
+   * The editor's generated ids must never be created during server rendering:
+   * the server and browser would produce different UUIDs, which would also
+   * change field ids and dnd-kit's accessibility attributes during hydration.
+   */
+  if (!draft || !agenda) {
+    return (
+      <main className="min-h-svh bg-paper" id="main">
+        <AppHeader team={team} />
+        <div
+          className="mx-auto grid w-[min(1040px,calc(100%-2.5rem))] gap-5 pt-9"
+          aria-busy="true"
+          aria-label="Loading event editor"
+        >
+          <div className="h-24 animate-pulse rounded-panel bg-surface-sunken" />
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+            <div className="h-80 animate-pulse rounded-panel bg-surface-sunken" />
+            <div className="h-64 animate-pulse rounded-panel bg-surface-sunken" />
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-svh bg-paper" id="main">
@@ -207,7 +248,7 @@ export function EventEditor() {
                 Save changes
               </Button>
             </div>
-            <Button variant="primary" onClick={() => save(true)}>
+            <Button variant="primary" onClick={handlePrimaryAction}>
               {draft.status === "live" ? "Return to control" : "Start event"}
             </Button>
           </div>
@@ -227,18 +268,17 @@ export function EventEditor() {
 
               <div className="mt-4 grid gap-4">
                 <div className="min-w-0">
-                  <Label htmlFor="event-name">Event name</Label>
                   <Input
                     id="event-name"
                     ref={nameField}
-                    className="mt-1.5"
+                    label="Event name"
                     placeholder="Annual Leadership Summit"
                     value={draft.name}
                     aria-invalid={showErrors && Boolean(nameError)}
                     aria-describedby={showErrors && nameError ? "event-name-error" : undefined}
-                    onChange={(event) => {
+                    onValueChange={(name) => {
                       hideSaveNotice();
-                      setDraft({ ...draft, name: event.target.value });
+                      setDraft({ ...draft, name });
                     }}
                   />
                   {showErrors && nameError && (
@@ -253,17 +293,14 @@ export function EventEditor() {
                 </div>
 
                 <div>
-                  <Label htmlFor="event-date">Date</Label>
-                  <div className="mt-1.5">
-                    <DateField
-                      id="event-date"
-                      value={draft.date}
-                      onChange={(date) => {
-                        hideSaveNotice();
-                        setDraft({ ...draft, date });
-                      }}
-                    />
-                  </div>
+                  <DateField
+                    id="event-date"
+                    value={draft.date}
+                    onChange={(date) => {
+                      hideSaveNotice();
+                      setDraft({ ...draft, date });
+                    }}
+                  />
                 </div>
               </div>
 
@@ -290,7 +327,7 @@ export function EventEditor() {
                 </dl>
               </div>
 
-              <Button className="mt-4 w-full" variant="primary" onClick={() => save(true)}>
+              <Button className="mt-4 w-full" variant="primary" onClick={handlePrimaryAction}>
                 {draft.status === "live" ? "Return to control" : "Start event"}
               </Button>
             </Card>
@@ -298,7 +335,7 @@ export function EventEditor() {
 
           <div className="grid min-w-0 gap-3 lg:col-start-1 lg:row-start-1">
             <AgendaEditor
-              defaultValues={initialAgenda}
+              defaultValues={agenda}
               onChange={(values) => {
                 hideSaveNotice();
                 setAgenda(values);

@@ -2,11 +2,125 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** The alert runs for three seconds: three pulses with a gap between them. */
-const PULSE_COUNT = 3;
-const PULSE_SECONDS = 0.6;
-const PULSE_GAP = 0.4;
-export const CHIME_SECONDS = PULSE_COUNT * (PULSE_SECONDS + PULSE_GAP);
+export const CHIME_SECONDS = 1.5;
+
+export const CHIME_PRESETS = [
+  {
+    id: "feather",
+    label: "Feather bell",
+    description: "One very soft note with a long fade.",
+  },
+  {
+    id: "rising",
+    label: "Gentle rising chime",
+    description: "Two quiet notes with a friendly lift.",
+  },
+  {
+    id: "warm",
+    label: "Warm marimba",
+    description: "A short, rounded wooden tone.",
+  },
+  {
+    id: "airy",
+    label: "Airy glass",
+    description: "A delicate, brighter shimmer.",
+  },
+  {
+    id: "double",
+    label: "Soft double tap",
+    description: "Two muted taps of the same note.",
+  },
+] as const;
+
+export type ChimePreset = (typeof CHIME_PRESETS)[number]["id"];
+
+type ChimeTone = {
+  frequency: number;
+  type: OscillatorType;
+  gain: number;
+  startOffset: number;
+  release: number;
+};
+
+const CHIME_TONES: Record<ChimePreset, readonly ChimeTone[]> = {
+  feather: [
+    {
+      frequency: 523.25,
+      type: "sine",
+      gain: 0.055,
+      startOffset: 0,
+      release: 1.45,
+    },
+  ],
+  rising: [
+    {
+      frequency: 523.25,
+      type: "sine",
+      gain: 0.045,
+      startOffset: 0,
+      release: 0.72,
+    },
+    {
+      frequency: 659.25,
+      type: "sine",
+      gain: 0.04,
+      startOffset: 0.42,
+      release: 1.02,
+    },
+  ],
+  warm: [
+    {
+      frequency: 392,
+      type: "triangle",
+      gain: 0.04,
+      startOffset: 0,
+      release: 0.82,
+    },
+    {
+      frequency: 784,
+      type: "sine",
+      gain: 0.014,
+      startOffset: 0,
+      release: 0.62,
+    },
+  ],
+  airy: [
+    {
+      frequency: 1046.5,
+      type: "sine",
+      gain: 0.032,
+      startOffset: 0,
+      release: 1.18,
+    },
+    {
+      frequency: 1567.98,
+      type: "sine",
+      gain: 0.01,
+      startOffset: 0,
+      release: 0.92,
+    },
+  ],
+  double: [
+    {
+      frequency: 440,
+      type: "sine",
+      gain: 0.045,
+      startOffset: 0,
+      release: 0.46,
+    },
+    {
+      frequency: 440,
+      type: "sine",
+      gain: 0.04,
+      startOffset: 0.58,
+      release: 0.52,
+    },
+  ],
+};
+
+export function isChimePreset(value: string | null): value is ChimePreset {
+  return CHIME_PRESETS.some((preset) => preset.id === value);
+}
 
 type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext };
 
@@ -17,7 +131,7 @@ function createContext(): AudioContext | null {
 }
 
 /**
- * A three-second alert synthesised on the fly — no audio file to ship, cache
+ * A brief, gentle alert synthesised on the fly — no audio file to ship, cache
  * or fail to load in a venue with poor connectivity.
  *
  * Browsers refuse to start audio until the page has been interacted with, so
@@ -47,31 +161,53 @@ export function useChime() {
     return ready;
   }, []);
 
-  const play = useCallback(() => {
+  const disable = useCallback(async () => {
     const audio = context.current;
-    if (!audio || audio.state !== "running") return;
-
-    const start = audio.currentTime;
-    for (let pulse = 0; pulse < PULSE_COUNT; pulse += 1) {
-      const at = start + pulse * (PULSE_SECONDS + PULSE_GAP);
-
-      // Two detuned sine partials read as a warm chime rather than a beep.
-      const gain = audio.createGain();
-      gain.connect(audio.destination);
-      gain.gain.setValueAtTime(0, at);
-      gain.gain.linearRampToValueAtTime(0.28, at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + PULSE_SECONDS);
-
-      for (const frequency of [880, 1320]) {
-        const oscillator = audio.createOscillator();
-        oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(frequency, at);
-        oscillator.connect(gain);
-        oscillator.start(at);
-        oscillator.stop(at + PULSE_SECONDS);
-      }
-    }
+    if (audio?.state === "running") await audio.suspend();
+    setIsReady(false);
   }, []);
 
-  return { play, unlock, isReady };
+  const play = useCallback(async (preset: ChimePreset = "feather") => {
+    const audio = context.current;
+    if (!audio) return false;
+    /*
+     * Browsers may suspend an unlocked context while a display sits idle.
+     * Resuming it here keeps a long talk from silently losing its end alarm.
+     */
+    if (audio.state === "suspended") {
+      try {
+        await audio.resume();
+      } catch {
+        return false;
+      }
+    }
+    if (audio.state !== "running") return false;
+
+    const start = audio.currentTime;
+    for (const tone of CHIME_TONES[preset]) {
+      const at = start + tone.startOffset;
+      const gain = audio.createGain();
+      gain.connect(audio.destination);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.linearRampToValueAtTime(tone.gain, at + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + tone.release);
+
+      const oscillator = audio.createOscillator();
+      oscillator.type = tone.type;
+      oscillator.frequency.setValueAtTime(tone.frequency, at);
+      oscillator.connect(gain);
+      oscillator.start(at);
+      oscillator.stop(
+        start +
+          Math.min(
+            CHIME_SECONDS,
+            tone.startOffset + tone.release + 0.05,
+          ),
+      );
+    }
+
+    return true;
+  }, []);
+
+  return { play, unlock, disable, isReady };
 }

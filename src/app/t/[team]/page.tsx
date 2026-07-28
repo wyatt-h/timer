@@ -15,6 +15,7 @@ import {
 import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ImportDialog } from "@/components/import-dialog";
@@ -94,17 +95,17 @@ export default function DashboardPage() {
 
         {events.length > 3 && (
           <div className="mb-4 flex items-center justify-end">
-            <label className="flex items-center gap-2 rounded-field border border-line bg-white px-3 text-text-subtle transition-[border-color,box-shadow] duration-150 focus-within:border-violet/50 focus-within:ring-[3px] focus-within:ring-violet/20">
-              <Search size={14} />
-              <input
-                className="h-9 w-[190px] border-0 bg-transparent text-[13px] text-ink outline-none max-sm:w-full"
-                type="search"
-                value={query}
-                placeholder="Search events"
-                aria-label="Search events by name"
-                onChange={(inputEvent) => setQuery(inputEvent.target.value)}
-              />
-            </label>
+            <Input
+              className="material-outlined-field--search"
+              type="search"
+              label="Search events"
+              value={query}
+              placeholder="Search events"
+              aria-label="Search events by name"
+              onValueChange={setQuery}
+            >
+              <Search slot="leading-icon" size={17} aria-hidden />
+            </Input>
           </div>
         )}
 

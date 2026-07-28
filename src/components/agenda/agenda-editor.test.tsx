@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AgendaEditor } from "@/components/agenda/agenda-editor";
 import type { AgendaFormValues } from "@/lib/agenda-schema";
@@ -38,6 +38,11 @@ function renderEditor() {
 
 const latest = (onChange: ReturnType<typeof vi.fn>): AgendaFormValues =>
   onChange.mock.calls.at(-1)![0];
+
+function editField(field: HTMLElement, value: string) {
+  Object.assign(field, { value });
+  fireEvent.input(field);
+}
 
 describe("AgendaEditor", () => {
   it("renders one card per agenda item with a running total", () => {
@@ -101,10 +106,9 @@ describe("AgendaEditor", () => {
   });
 
   it("edits a speaker name through form state", async () => {
-    const { onChange, user } = renderEditor();
+    const { onChange } = renderEditor();
     const input = screen.getByLabelText("Speaker");
-    await user.clear(input);
-    await user.type(input, "Elena Park");
+    editField(input, "Elena Park");
     expect(latest(onChange).agendaItems[0]).toMatchObject({
       speaker: { name: "Elena Park" },
     });
@@ -160,37 +164,35 @@ describe("AgendaEditor", () => {
     ]);
   });
 
-  it("shows used and remaining minutes derived from the rows", async () => {
-    const { user } = renderEditor();
+  it("shows used and remaining minutes derived from the rows", () => {
+    renderEditor();
     /* 8 + 7 used of a 30 min panel. */
     expect(screen.getByText("Used").nextElementSibling).toHaveTextContent("15 min");
     expect(screen.getByText("Left").nextElementSibling).toHaveTextContent("15 min");
 
     /* Both figures are derived, so editing a row moves them together. */
     const noah = screen.getByLabelText(/minutes for noah/i);
-    await user.clear(noah);
-    await user.type(noah, "12");
-    await user.tab();
+    editField(noah, "12");
+    fireEvent.blur(noah);
     expect(screen.getByText("Used").nextElementSibling).toHaveTextContent("19 min");
     expect(screen.getByText("Left").nextElementSibling).toHaveTextContent("11 min");
   });
 
   it("reports a panel-level error when panelists overrun the panel", async () => {
-    const { user } = renderEditor();
+    renderEditor();
     const noahMinutes = screen.getByLabelText(/minutes for noah/i);
-    await user.clear(noahMinutes);
-    await user.type(noahMinutes, "40");
-    await user.tab();
+    editField(noahMinutes, "40");
+    fireEvent.blur(noahMinutes);
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/over the 30 min panel/i);
   });
 
   it("surfaces a required-field error next to a blank name", async () => {
-    const { user } = renderEditor();
+    renderEditor();
     const host = screen.getByLabelText("Panel host");
-    await user.clear(host);
-    await user.tab();
+    editField(host, "");
+    fireEvent.blur(host);
     expect(await screen.findByText(/host name is required/i)).toBeInTheDocument();
     expect(host).toHaveAttribute("aria-invalid", "true");
   });
@@ -250,11 +252,10 @@ describe("AgendaEditor", () => {
   });
 
   it("keeps an edited value bound to its item id, which is what survives a move", async () => {
-    const { onChange, user } = renderEditor();
+    const { onChange } = renderEditor();
 
     const speakerName = screen.getByLabelText("Speaker");
-    await user.clear(speakerName);
-    await user.type(speakerName, "Elena Park");
+    editField(speakerName, "Elena Park");
 
     /* Reordering moves whole objects, so an edit held against a stable id
        cannot be stranded on the wrong row. */

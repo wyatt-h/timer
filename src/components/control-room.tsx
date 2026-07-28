@@ -35,6 +35,11 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DurationInput } from "@/components/duration-input";
 import { LiveClock } from "@/components/live-clock";
 import { SortableList } from "@/components/sortable-list";
+import { Input } from "@/components/ui/input";
+import {
+  MaterialOutlinedDurationField,
+  MaterialOutlinedField,
+} from "@/components/material-outlined-field";
 import {
   describeTimer,
   elapsedRatio,
@@ -58,9 +63,144 @@ function remainingNow(
   status: RuntimeState["status"] | undefined,
   endsAt: number | null | undefined,
   fallback: number | null | undefined,
+  now = Date.now(),
 ) {
-  if (status === "running" && endsAt) return (endsAt - Date.now()) / 1000;
+  if (status === "running" && endsAt) return (endsAt - now) / 1000;
   return fallback ?? 0;
+}
+
+export function panelistTimingIsLocked(
+  flatSpeakerIndex: number,
+  currentSegmentIndex: number,
+) {
+  return flatSpeakerIndex <= currentSegmentIndex;
+}
+
+export function speakerPatchForItem(
+  item: AgendaItem,
+  speakerId: string,
+  patch: Partial<Speaker>,
+): Partial<AgendaItem> {
+  return {
+    speakers: item.speakers.map((speaker) =>
+      speaker.id === speakerId ? { ...speaker, ...patch } : speaker,
+    ),
+    ...(item.kind === "single" && typeof patch.durationSeconds === "number"
+      ? { durationSeconds: patch.durationSeconds }
+      : {}),
+  };
+}
+
+function DurationReadout({
+  seconds,
+  label,
+}: {
+  seconds: number;
+  label: string;
+}) {
+  return (
+    <span
+      aria-label={label}
+      className="tabular inline-flex h-12 w-[118px] shrink-0 items-center justify-between rounded-field border border-line-soft bg-surface-sunken px-3 text-[13px] text-ink"
+    >
+      <span>{Math.round(seconds / 60)}</span>
+      <span className="text-[12px] text-text-subtle">min</span>
+    </span>
+  );
+}
+
+export function speakerTimerTogglePatch({
+  runtime,
+  speakerDuration,
+  panelDuration,
+  isPanel,
+  now = Date.now(),
+}: {
+  runtime: RuntimeState;
+  speakerDuration: number;
+  panelDuration: number;
+  isPanel: boolean;
+  now?: number;
+}): Partial<RuntimeState> {
+  if (runtime.status === "running") {
+    return {
+      status: "paused",
+      remainingSeconds: remainingNow(
+        runtime.status,
+        runtime.endsAt,
+        runtime.remainingSeconds,
+        now,
+      ),
+      endsAt: null,
+    };
+  }
+
+  const speakerSeconds =
+    runtime.status === "ended" ? speakerDuration : runtime.remainingSeconds;
+  const patch: Partial<RuntimeState> = {
+    status: "running",
+    remainingSeconds: speakerSeconds,
+    endsAt: now + speakerSeconds * 1000,
+  };
+
+  if (isPanel && runtime.panelStatus !== "running") {
+    const panelSeconds =
+      runtime.panelStatus === "ended"
+        ? panelDuration
+        : runtime.panelRemainingSeconds ?? panelDuration;
+    patch.panelStatus = "running";
+    patch.panelRemainingSeconds = panelSeconds;
+    patch.panelEndsAt = now + panelSeconds * 1000;
+  }
+
+  return patch;
+}
+
+export function panelTimerTogglePatch({
+  runtime,
+  panelDuration,
+  now = Date.now(),
+}: {
+  runtime: RuntimeState;
+  panelDuration: number;
+  now?: number;
+}): Partial<RuntimeState> {
+  const panelStatus = runtime.panelStatus ?? "ready";
+  if (panelStatus === "running") {
+    const patch: Partial<RuntimeState> = {
+      panelStatus: "paused",
+      panelRemainingSeconds: remainingNow(
+        panelStatus,
+        runtime.panelEndsAt,
+        runtime.panelRemainingSeconds ?? panelDuration,
+        now,
+      ),
+      panelEndsAt: null,
+    };
+
+    if (runtime.status === "running") {
+      patch.status = "paused";
+      patch.remainingSeconds = remainingNow(
+        runtime.status,
+        runtime.endsAt,
+        runtime.remainingSeconds,
+        now,
+      );
+      patch.endsAt = null;
+    }
+
+    return patch;
+  }
+
+  const panelSeconds =
+    panelStatus === "ended"
+      ? panelDuration
+      : runtime.panelRemainingSeconds ?? panelDuration;
+  return {
+    panelStatus: "running",
+    panelRemainingSeconds: panelSeconds,
+    panelEndsAt: now + panelSeconds * 1000,
+  };
 }
 
 const SHORTCUT_HELP = [
@@ -240,47 +380,24 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
   }
 
   function toggleSpeakerTimer() {
-    if (runtime.status === "running") {
-      setRuntime({
-        status: "paused",
-        remainingSeconds: remainingNow(runtime.status, runtime.endsAt, runtime.remainingSeconds),
-        endsAt: null,
-      });
-      return;
-    }
-    const seconds =
-      runtime.status === "ended" ? current.durationSeconds : runtime.remainingSeconds;
     setRuntime(
-      { status: "running", remainingSeconds: seconds, endsAt: Date.now() + seconds * 1000 },
-      { status: "live" },
+      speakerTimerTogglePatch({
+        runtime,
+        speakerDuration: current.durationSeconds,
+        panelDuration: currentItem.durationSeconds,
+        isPanel,
+      }),
+      runtime.status === "running" ? undefined : { status: "live" },
     );
   }
 
   function togglePanelTimer() {
-    const panelStatus = runtime.panelStatus ?? "ready";
-    if (panelStatus === "running") {
-      setRuntime({
-        panelStatus: "paused",
-        panelRemainingSeconds: remainingNow(
-          panelStatus,
-          runtime.panelEndsAt,
-          runtime.panelRemainingSeconds ?? currentItem.durationSeconds,
-        ),
-        panelEndsAt: null,
-      });
-      return;
-    }
-    const seconds =
-      panelStatus === "ended"
-        ? currentItem.durationSeconds
-        : runtime.panelRemainingSeconds ?? currentItem.durationSeconds;
     setRuntime(
-      {
-        panelStatus: "running",
-        panelRemainingSeconds: seconds,
-        panelEndsAt: Date.now() + seconds * 1000,
-      },
-      { status: "live" },
+      panelTimerTogglePatch({
+        runtime,
+        panelDuration: currentItem.durationSeconds,
+      }),
+      runtime.panelStatus === "running" ? undefined : { status: "live" },
     );
   }
 
@@ -346,16 +463,13 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
   }
 
   /**
-   * Changing a panelist's allocation mid-panel. If they are the one on stage,
-   * the live countdown is rebased by the same delta so an edit takes effect
-   * immediately rather than at their next turn.
+   * Timing becomes historical as soon as a panelist reaches the stage. Only
+   * not-yet-speaking panelists can have their allocation changed.
    */
   function updatePanelistDuration(item: AgendaItem, speakerId: string, durationSeconds: number) {
-    const previous = item.speakers.find((speaker) => speaker.id === speakerId);
+    const flatIndex = segments.findIndex((segment) => segment.id === speakerId);
+    if (panelistTimingIsLocked(flatIndex, segmentIndex)) return;
     patchSpeaker(item, speakerId, { durationSeconds });
-    if (!previous || speakerId !== current.id) return;
-    const delta = durationSeconds - previous.durationSeconds;
-    if (delta !== 0) adjust(delta, false);
   }
 
   /*
@@ -442,11 +556,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
   }
 
   function patchSpeaker(item: AgendaItem, speakerId: string, patch: Partial<Speaker>) {
-    patchAgendaItem(item.id, {
-      speakers: item.speakers.map((speaker) =>
-        speaker.id === speakerId ? { ...speaker, ...patch } : speaker,
-      ),
-    });
+    patchAgendaItem(item.id, speakerPatchForItem(item, speakerId, patch));
   }
 
   function removeFutureItem(itemId: string) {
@@ -495,7 +605,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
    */
   const runWorkspace = useMemo(
     () => (
-    <section className={cn("min-h-[calc(100svh-7.875rem)] rounded-panel border border-line bg-white/95 p-5 shadow-[0_12px_34px_rgba(26,22,42,0.045)]", isFocused && "hidden")}>
+    <section className="min-h-[calc(100svh-7.875rem)] rounded-panel border border-line bg-white/95 p-5 shadow-[0_12px_34px_rgba(26,22,42,0.045)]">
       <div className="mb-4 flex items-end justify-between gap-5">
         <div>
           <h2 className="text-[24px] font-semibold tracking-[-0.045em]">Up next</h2>
@@ -542,13 +652,39 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                 )}
               </div>
               <div className="min-w-0">
-                <div className="mb-1.5 flex items-center gap-2">
-                  <span className={cn("inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold capitalize", item.kind === "panel" ? "bg-violet-soft text-violet-dark" : "bg-[#eaf0ff] text-[#3f558f]")}>
-                    {item.kind === "panel" ? <UsersRound size={11} /> : <UserRound size={11} />}
-                    {item.kind === "panel" ? "Panel" : "Speaker"}
-                  </span>
-                  {isCurrent && <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-[12px] font-bold text-success">On now</span>}
-                  {isPast && <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-violet-soft px-2.5 py-1 text-[12px] font-bold text-violet-dark">Complete</span>}
+                <div
+                  className={cn(
+                    "mb-1.5 grid grid-cols-[minmax(0,1fr)_118px_2.25rem] items-center gap-2 pr-2",
+                    isFuture && "min-h-12",
+                  )}
+                >
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className={cn("inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold capitalize", item.kind === "panel" ? "bg-violet-soft text-violet-dark" : "bg-[#eaf0ff] text-[#3f558f]")}>
+                      {item.kind === "panel" ? <UsersRound size={11} /> : <UserRound size={11} />}
+                      {item.kind === "panel" ? "Panel" : "Speaker"}
+                    </span>
+                    {isCurrent && <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-1 text-[12px] font-bold text-success">On now</span>}
+                    {isPast && <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-violet-soft px-2.5 py-1 text-[12px] font-bold text-violet-dark">Complete</span>}
+                  </div>
+                  {isFuture && item.kind === "panel" && (
+                    <DurationInput
+                      label="Total time"
+                      seconds={item.durationSeconds}
+                      aria-label={`Total minutes for ${itemLabel(item)}`}
+                      onSecondsChange={(durationSeconds) =>
+                        patchAgendaItem(item.id, { durationSeconds })
+                      }
+                    />
+                  )}
+                  {isFuture && (
+                    <button
+                      className="col-start-3 grid size-9 shrink-0 place-items-center rounded-[9px] text-text-subtle/60 transition-colors duration-150 hover:bg-surface-hover hover:text-over disabled:opacity-30"
+                      onClick={() => removeFutureItem(item.id)}
+                      aria-label={`Remove ${itemLabel(item)}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
 
                 {isFuture ? (
@@ -556,68 +692,43 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                     {/*
                       * No type switch: an item's kind is fixed at creation.
                       * The chip above the row already states which it is.
-                      */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="flex items-center gap-1.5 text-[12px] whitespace-nowrap text-text-subtle">
-                        <DurationInput
-                          seconds={item.durationSeconds}
-                          aria-label={`Total minutes for ${itemLabel(item)}`}
-                          onSecondsChange={(durationSeconds) =>
-                            patchAgendaItem(item.id, { durationSeconds })
-                          }
-                        />
-                        min total
-                      </label>
-                      <button
-                        className="ml-auto grid size-9 shrink-0 place-items-center rounded-[9px] text-text-subtle/60 transition-colors duration-150 hover:bg-surface-hover hover:text-over disabled:opacity-30"
-                        onClick={() => removeFutureItem(item.id)}
-                        aria-label={`Remove ${itemLabel(item)}`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    */}
                     <div className="mt-1.5 grid gap-1 rounded-control border border-line-soft bg-surface-sunken p-2">
                       {item.kind === "panel" && (
-                        <label className="grid grid-cols-[auto_minmax(0,320px)] items-center gap-2.5 px-0.5 pb-1.5 text-[12px] font-semibold text-text-muted">
-                          <span className="text-[12px] font-semibold">Host</span>
-                          <input
-                            className="h-9 w-full min-w-0 rounded-field border border-line bg-surface-raised px-3 text-[13px] outline-none transition-[border-color,box-shadow] duration-150 focus-visible:border-violet/50 focus-visible:ring-[3px] focus-visible:ring-violet/20"
+                        <div className="flex flex-wrap items-center gap-3 py-1">
+                          <MaterialOutlinedField
+                            className="material-outlined-field material-outlined-field--host"
+                            label="Host"
                             value={item.host ?? ""}
                             placeholder="Panel host"
-                            aria-label={`Host of ${itemLabel(item)}`}
-                            onChange={(inputEvent) =>
-                              patchAgendaItem(item.id, { host: inputEvent.target.value })
-                            }
+                            ariaLabel={`Host of ${itemLabel(item)}`}
+                            onValueChange={(host) => patchAgendaItem(item.id, { host })}
                           />
-                        </label>
-                      )}
-                      {item.kind === "panel" && (
-                        <div className="flex items-center gap-2.5 px-0.5 pb-1.5 text-[12px] text-text-muted">
-                          <span className="mr-auto text-[12px] font-semibold">Default per panelist</span>
-                          <label className="flex items-center gap-1.5 text-[12px] whitespace-nowrap text-text-subtle">
-                            <DurationInput
+                          <div className="ml-auto flex flex-wrap items-center justify-end gap-2.5 text-[12px] text-text-muted">
+                            <MaterialOutlinedDurationField
+                              className="material-outlined-field material-outlined-field--duration"
+                              label="Default per panelist"
                               seconds={item.speakerDefaultSeconds}
                               fallbackMinutes={5}
-                              aria-label={`Default minutes per panelist in ${itemLabel(item)}`}
+                              ariaLabel={`Default minutes per panelist in ${itemLabel(item)}`}
                               onSecondsChange={(speakerDefaultSeconds) =>
                                 patchAgendaItem(item.id, { speakerDefaultSeconds })
                               }
                             />
-                            min
-                          </label>
-                          <button
-                            className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line bg-white px-3 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover"
-                            onClick={() =>
-                              patchAgendaItem(item.id, {
-                                speakers: item.speakers.map((speaker) => ({
-                                  ...speaker,
-                                  durationSeconds: item.speakerDefaultSeconds ?? 5 * 60,
-                                })),
-                              })
-                            }
-                          >
-                            Apply to all
-                          </button>
+                            <button
+                              className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line bg-white px-3 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover"
+                              onClick={() =>
+                                patchAgendaItem(item.id, {
+                                  speakers: item.speakers.map((speaker) => ({
+                                    ...speaker,
+                                    durationSeconds: item.speakerDefaultSeconds ?? 5 * 60,
+                                  })),
+                                })
+                              }
+                            >
+                              Apply to all
+                            </button>
+                          </div>
                         </div>
                       )}
                       <SortableList
@@ -632,9 +743,8 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                               /* Panelists get a handle column; a lone speaker
                                  has nothing to reorder against. */
                               item.kind === "panel"
-                                ? "grid-cols-[2.25rem_minmax(0,17.5rem)_auto_auto]"
-                                : "grid-cols-[minmax(0,17.5rem)_auto_auto]",
-                              "justify-start max-sm:grid-cols-[minmax(0,1fr)_auto_auto]",
+                                ? "grid-cols-[2.25rem_minmax(0,1fr)_118px_2.25rem]"
+                                : "grid-cols-[minmax(0,1fr)_118px_2.25rem]",
                             )}
                           >
                             {item.kind === "panel" && (
@@ -650,32 +760,39 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                                 <GripVertical size={14} />
                               </button>
                             )}
-                            <input
-                              className="h-9 w-full min-w-0 rounded-field border border-line bg-surface-raised px-3 text-[13px] outline-none transition-[border-color,box-shadow] duration-150 focus-visible:border-violet/50 focus-visible:ring-[3px] focus-visible:ring-violet/20"
+                            <Input
+                              className="material-outlined-field--compact w-full max-w-[17.5rem] min-w-0 justify-self-start"
+                              label={
+                                item.kind === "panel"
+                                  ? `Panelist ${speakerIndex + 1}`
+                                  : "Speaker"
+                              }
                               aria-label={`Name of ${
                                 item.kind === "panel"
                                   ? `panelist ${speakerIndex + 1}`
                                   : "the speaker"
                               } in ${itemLabel(item)}`}
                               value={speaker.name}
-                              onChange={(inputEvent) =>
+                              onValueChange={(name) =>
                                 patchSpeaker(item, speaker.id, {
-                                  name: inputEvent.target.value,
+                                  name,
                                 })
                               }
                             />
-                            <label className="flex items-center gap-1.5 text-[12px] whitespace-nowrap text-text-subtle">
-                              <DurationInput
-                                seconds={speaker.durationSeconds}
-                                aria-label={`Minutes for ${
-                                  speaker.name || `panelist ${speakerIndex + 1}`
-                                }`}
-                                onSecondsChange={(durationSeconds) =>
-                                  patchSpeaker(item, speaker.id, { durationSeconds })
-                                }
-                              />
-                              min
-                            </label>
+                            <DurationInput
+                              label={
+                                item.kind === "single"
+                                  ? "Duration"
+                                  : "Minutes"
+                              }
+                              seconds={speaker.durationSeconds}
+                              aria-label={`Minutes for ${
+                                speaker.name || `panelist ${speakerIndex + 1}`
+                              }`}
+                              onSecondsChange={(durationSeconds) =>
+                                patchSpeaker(item, speaker.id, { durationSeconds })
+                              }
+                            />
                             {item.kind === "panel" && (
                               <button
                                 className="grid size-9 shrink-0 place-items-center rounded-[9px] text-text-subtle/60 transition-colors duration-150 hover:bg-surface-hover hover:text-over disabled:opacity-30"
@@ -693,6 +810,9 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                               >
                                 <Trash2 size={13} />
                               </button>
+                            )}
+                            {item.kind === "single" && (
+                              <span className="size-9" aria-hidden />
                             )}
                           </div>
                         )}
@@ -738,8 +858,10 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                         items={item.speakers}
                         scope={`live-current-panel-${item.id}`}
                         isItemDisabled={(speaker) =>
-                          segments.findIndex((segment) => segment.id === speaker.id) <=
-                          segmentIndex
+                          panelistTimingIsLocked(
+                            segments.findIndex((segment) => segment.id === speaker.id),
+                            segmentIndex,
+                          )
                         }
                         onReorder={(speakers) => patchAgendaItem(item.id, { speakers })}
                         renderItem={(speaker, speakerIndex, controls) => {
@@ -748,10 +870,14 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                           );
                           const speakerIsCurrent = flatIndex === segmentIndex;
                           const hasSpoken = flatIndex < segmentIndex;
+                          const timingLocked = panelistTimingIsLocked(
+                            flatIndex,
+                            segmentIndex,
+                          );
                           return (
                             <div
                               className={cn(
-                                "grid grid-cols-[1.75rem_minmax(0,320px)_auto_auto_auto] items-center gap-2 rounded-[11px] border border-transparent bg-white/70 px-1.5 py-1 transition-[border-color,background-color,opacity] duration-150 max-sm:grid-cols-[1.75rem_minmax(0,1fr)_auto]",
+                                "grid grid-cols-[1.75rem_minmax(0,1fr)_118px_2.25rem_auto] items-center gap-2 rounded-[11px] border border-transparent bg-white/70 px-1.5 py-1 transition-[border-color,background-color,opacity] duration-150 max-sm:grid-cols-[1.75rem_minmax(0,1fr)_118px]",
                                 speakerIsCurrent && "border-violet/36 bg-white",
                                 hasSpoken && "opacity-50",
                               )}
@@ -778,35 +904,36 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                               {hasSpoken || speakerIsCurrent ? (
                                 <span className="truncate text-[13px] font-semibold text-ink">{speaker.name}</span>
                               ) : (
-                                <input
-                                  className="h-9 w-full min-w-0 rounded-field border border-line bg-surface-raised px-3 text-[13px] outline-none transition-[border-color,box-shadow] duration-150 focus-visible:border-violet/50 focus-visible:ring-[3px] focus-visible:ring-violet/20"
+                                <Input
+                                  className="material-outlined-field--compact w-full min-w-0"
+                                  label={`Panelist ${speakerIndex + 1}`}
                                   aria-label={`Name of panelist ${speakerIndex + 1}`}
                                   value={speaker.name}
-                                  onChange={(inputEvent) =>
+                                  onValueChange={(name) =>
                                     patchSpeaker(item, speaker.id, {
-                                      name: inputEvent.target.value,
+                                      name,
                                     })
                                   }
                                 />
                               )}
 
-                              {hasSpoken ? (
-                                <span className="tabular text-[12px] text-text-subtle">
-                                  {formatDuration(speaker.durationSeconds)}
-                                </span>
+                              {timingLocked ? (
+                                <DurationReadout
+                                  seconds={speaker.durationSeconds}
+                                  label={`${Math.round(
+                                    speaker.durationSeconds / 60,
+                                  )} minutes for ${speaker.name}`}
+                                />
                               ) : (
-                                <label className="flex items-center gap-1.5 text-[12px] whitespace-nowrap text-text-subtle">
-                                  <DurationInput
-                                    seconds={speaker.durationSeconds}
-                                    aria-label={`Minutes for ${
-                                      speaker.name || `panelist ${speakerIndex + 1}`
-                                    }`}
-                                    onSecondsChange={(durationSeconds) =>
-                                      updatePanelistDuration(item, speaker.id, durationSeconds)
-                                    }
-                                  />
-                                  min
-                                </label>
+                                <DurationInput
+                                  seconds={speaker.durationSeconds}
+                                  aria-label={`Minutes for ${
+                                    speaker.name || `panelist ${speakerIndex + 1}`
+                                  }`}
+                                  onSecondsChange={(durationSeconds) =>
+                                    updatePanelistDuration(item, speaker.id, durationSeconds)
+                                  }
+                                />
                               )}
 
                               {!hasSpoken && (
@@ -1184,7 +1311,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
 
         </section>
 
-        {runWorkspace}
+        {!isFocused && runWorkspace}
       </div>
 
       <ConfirmDialog
