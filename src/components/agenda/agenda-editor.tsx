@@ -41,6 +41,7 @@ import { agendaItemTitle } from "@/lib/agenda-labels";
 export type AgendaEditorProps = {
   defaultValues: AgendaFormValues;
   onChange?: (values: AgendaFormValues) => void;
+  showSummary?: boolean;
 };
 
 /**
@@ -51,7 +52,11 @@ export type AgendaEditorProps = {
  * fields display. Everything shown as a total is derived on render from the
  * same values the inputs are bound to.
  */
-export function AgendaEditor({ defaultValues, onChange }: AgendaEditorProps) {
+export function AgendaEditor({
+  defaultValues,
+  onChange,
+  showSummary = true,
+}: AgendaEditorProps) {
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
   const form = useForm({
@@ -146,11 +151,13 @@ export function AgendaEditor({ defaultValues, onChange }: AgendaEditorProps) {
             >
               Run of show
             </h2>
-            <p className="mt-1 text-[13px] text-text-muted">
-              {items.length} {items.length === 1 ? "item" : "items"}
-              <span aria-hidden> · </span>
-              <span className="tabular">{programmeMinutes}</span> min total
-            </p>
+            {showSummary && (
+              <p className="mt-1 text-[13px] text-text-muted">
+                {items.length} {items.length === 1 ? "item" : "items"}
+                <span aria-hidden> · </span>
+                <span className="tabular">{programmeMinutes}</span> min total
+              </p>
+            )}
           </div>
         </header>
 
