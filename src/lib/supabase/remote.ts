@@ -1,19 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AgendaItem, AuraEvent, Speaker, Workspace } from "@/lib/types";
+import type { AgendaItem, TimerEvent, Speaker, Workspace } from "@/lib/types";
 
 type DbSpeaker = {
   id: string;
   name: string;
   duration_seconds: number;
+  sound_muted: boolean | null;
   order_index: number;
 };
 
 type DbAgenda = {
   id: string;
   kind: "single" | "panel";
-  title: string;
   duration_seconds: number;
   speaker_default_seconds: number | null;
+  host: string | null;
+  sound_muted: boolean | null;
   order_index: number;
   speakers: DbSpeaker[];
 };
@@ -26,6 +28,7 @@ type DbRuntime = {
   panel_status: "ready" | "running" | "paused" | "ended" | null;
   panel_remaining_seconds: number | null;
   panel_ends_at: string | null;
+  sound_enabled: boolean | null;
   updated_at: string;
 };
 
@@ -33,7 +36,6 @@ type DbEvent = {
   id: string;
   name: string;
   event_date: string;
-  location: string;
   status: "draft" | "live" | "completed";
   viewer_token: string;
   created_at: string;
@@ -42,29 +44,34 @@ type DbEvent = {
 };
 
 function mapSpeaker(row: DbSpeaker): Speaker {
-  return { id: row.id, name: row.name, durationSeconds: row.duration_seconds };
+  return {
+    id: row.id,
+    name: row.name,
+    durationSeconds: row.duration_seconds,
+    soundMuted: row.sound_muted ?? undefined,
+  };
 }
 
 function mapAgenda(row: DbAgenda): AgendaItem {
   return {
     id: row.id,
     kind: row.kind,
-    title: row.title,
     durationSeconds: row.duration_seconds,
     speakerDefaultSeconds: row.speaker_default_seconds ?? undefined,
+    host: row.host ?? undefined,
+    soundMuted: row.sound_muted ?? undefined,
     speakers: [...(row.speakers ?? [])]
       .sort((a, b) => a.order_index - b.order_index)
       .map(mapSpeaker),
   };
 }
 
-function mapEvent(row: DbEvent): AuraEvent {
+function mapEvent(row: DbEvent): TimerEvent {
   const runtime = Array.isArray(row.event_runtime) ? row.event_runtime[0] : row.event_runtime;
   return {
     id: row.id,
     name: row.name,
     date: row.event_date,
-    location: row.location,
     status: row.status,
     viewerToken: row.viewer_token,
     createdAt: new Date(row.created_at).getTime(),
@@ -85,6 +92,7 @@ function mapEvent(row: DbEvent): AuraEvent {
           panelEndsAt: runtime.panel_ends_at
             ? new Date(runtime.panel_ends_at).getTime()
             : null,
+          soundEnabled: runtime.sound_enabled ?? true,
           updatedAt: new Date(runtime.updated_at).getTime(),
         }
       : {
@@ -95,6 +103,7 @@ function mapEvent(row: DbEvent): AuraEvent {
           panelStatus: null,
           panelRemainingSeconds: null,
           panelEndsAt: null,
+          soundEnabled: true,
           updatedAt: Date.now(),
         },
   };
@@ -112,7 +121,7 @@ export async function pullWorkspace(client: SupabaseClient, team: string): Promi
   const { data, error } = await client
     .from("events")
     .select(
-      "id, name, event_date, location, status, viewer_token, created_at, agenda_items(id, kind, title, duration_seconds, speaker_default_seconds, order_index, speakers(id, name, duration_seconds, order_index)), event_runtime(status, segment_index, remaining_seconds, ends_at, panel_status, panel_remaining_seconds, panel_ends_at, updated_at)",
+      "id, name, event_date, status, viewer_token, created_at, agenda_items(id, kind, duration_seconds, speaker_default_seconds, host, sound_muted, order_index, speakers(id, name, duration_seconds, sound_muted, order_index)), event_runtime(status, segment_index, remaining_seconds, ends_at, panel_status, panel_remaining_seconds, panel_ends_at, sound_enabled, updated_at)",
     )
     .eq("team_id", teamRow.id)
     .order("created_at", { ascending: false });
@@ -155,7 +164,6 @@ export async function pushWorkspace(client: SupabaseClient, workspace: Workspace
       team_id: teamRow.id,
       name: event.name,
       event_date: event.date,
-      location: event.location,
       status: event.status,
       viewer_token: event.viewerToken,
       created_by: user.id,
@@ -178,9 +186,10 @@ export async function pushWorkspace(client: SupabaseClient, workspace: Workspace
         id: item.id,
         event_id: event.id,
         kind: item.kind,
-        title: item.title,
         duration_seconds: item.durationSeconds,
         speaker_default_seconds: item.speakerDefaultSeconds ?? null,
+        host: item.host?.trim() || null,
+        sound_muted: item.soundMuted ?? null,
         order_index: orderIndex,
       });
       if (agendaResult.error) throw agendaResult.error;
@@ -203,6 +212,7 @@ export async function pushWorkspace(client: SupabaseClient, workspace: Workspace
             agenda_item_id: item.id,
             name: speaker.name,
             duration_seconds: speaker.durationSeconds,
+            sound_muted: speaker.soundMuted ?? null,
             order_index: speakerIndex,
           })),
         );
@@ -221,6 +231,7 @@ export async function pushWorkspace(client: SupabaseClient, workspace: Workspace
       panel_ends_at: event.runtime.panelEndsAt
         ? new Date(event.runtime.panelEndsAt).toISOString()
         : null,
+      sound_enabled: event.runtime.soundEnabled ?? true,
       updated_by: user.id,
     });
     if (runtimeResult.error) throw runtimeResult.error;
@@ -230,20 +241,20 @@ export async function pushWorkspace(client: SupabaseClient, workspace: Workspace
 export async function pullPublicEvent(
   client: SupabaseClient,
   token: string,
-): Promise<{ workspace: Workspace; event: AuraEvent } | null> {
+): Promise<{ workspace: Workspace; event: TimerEvent } | null> {
   const { data, error } = await client.rpc("get_public_event", { p_token: token });
   if (error || !data) return null;
   const payload = data as {
     team: string;
-    event: AuraEvent & {
-      runtime: AuraEvent["runtime"] & {
+    event: TimerEvent & {
+      runtime: TimerEvent["runtime"] & {
         endsAt: string | null;
         panelEndsAt: string | null;
         updatedAt: string;
       };
     };
   };
-  const event: AuraEvent = {
+  const event: TimerEvent = {
     ...payload.event,
     runtime: {
       ...payload.event.runtime,

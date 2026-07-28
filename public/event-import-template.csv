@@ -1,5 +1,6 @@
-event_name,event_date,location,item_order,item_type,item_title,speaker_name,duration_minutes,panel_total_minutes,speaker_default_minutes,speaker_minutes
-Annual Leadership Summit,2026-09-12,Grand Hall,1,single,Opening keynote,Maya Chen,12,,,
-Annual Leadership Summit,2026-09-12,Grand Hall,2,panel,Building teams that last,Noah Williams,,30,7,8
-Annual Leadership Summit,2026-09-12,Grand Hall,2,panel,Building teams that last,Sofia Patel,,30,7,7
-Annual Leadership Summit,2026-09-12,Grand Hall,2,panel,Building teams that last,Marcus Reed,,30,7,9
+event_name,event_date,item_order,item_type,panel_host,speaker_name,duration_minutes,panel_total_minutes,speaker_default_minutes,speaker_minutes
+Annual Leadership Summit,2026-09-12,1,single,,Maya Chen,12,,,
+Annual Leadership Summit,2026-09-12,2,panel,Ana Torres,Noah Williams,,30,7,8
+Annual Leadership Summit,2026-09-12,2,panel,Ana Torres,Sofia Patel,,30,7,7
+Annual Leadership Summit,2026-09-12,2,panel,Ana Torres,Marcus Reed,,30,7,9
+Annual Leadership Summit,2026-09-12,3,single,,Elena Park,8,,,

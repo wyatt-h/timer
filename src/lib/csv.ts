@@ -1,5 +1,5 @@
 import { makeEvent } from "@/lib/store";
-import type { AgendaItem, AuraEvent, Speaker } from "@/lib/types";
+import type { AgendaItem, TimerEvent, Speaker } from "@/lib/types";
 
 type CsvRow = Record<string, string>;
 
@@ -36,13 +36,11 @@ function positiveNumber(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export function parseEventCsv(source: string): AuraEvent[] {
+export function parseEventCsv(source: string): TimerEvent[] {
   const rows = parseRows(source);
   if (rows.length < 2) throw new Error("The CSV needs a header and at least one data row.");
   const headers = rows[0].map((header) => header.trim().toLowerCase());
-  const missing = ["event_name", "item_type", "item_title"].filter(
-    (header) => !headers.includes(header),
-  );
+  const missing = ["event_name", "item_type"].filter((header) => !headers.includes(header));
   if (missing.length) throw new Error(`Missing required columns: ${missing.join(", ")}`);
 
   const records = rows.slice(1).map((values) =>
@@ -61,14 +59,22 @@ export function parseEventCsv(source: string): AuraEvent[] {
   return Array.from(byEvent.entries()).map(([eventName, eventRows]) => {
     const event = makeEvent(eventName);
     event.date = eventRows[0].event_date || event.date;
-    event.location = eventRows[0].location || "Main stage";
     const byItem = new Map<string, CsvRow[]>();
+    /*
+     * Panelists are grouped by `item_order`, which is now the only thing
+     * tying several rows to one agenda item. Without it each row becomes its
+     * own item, since there is no title left to group on.
+     */
     eventRows.forEach((record, rowIndex) => {
-      const key = `${record.item_order || record.item_title || rowIndex + 1}:${record.item_title}`;
+      const key = record.item_order || `row-${rowIndex + 1}`;
       byItem.set(key, [...(byItem.get(key) ?? []), record]);
     });
     event.agenda = Array.from(byItem.entries())
-      .sort(([left], [right]) => Number(left.split(":")[0]) - Number(right.split(":")[0]))
+      .sort(([left], [right]) => {
+        const leftOrder = Number(left.replace("row-", ""));
+        const rightOrder = Number(right.replace("row-", ""));
+        return leftOrder - rightOrder;
+      })
       .map(([, itemRows]): AgendaItem => {
         const first = itemRows[0];
         const kind = first.item_type.toLowerCase() === "panel" ? "panel" : "single";
@@ -90,7 +96,7 @@ export function parseEventCsv(source: string): AuraEvent[] {
         return {
           id: crypto.randomUUID(),
           kind,
-          title: first.item_title,
+          host: kind === "panel" ? first.panel_host || undefined : undefined,
           durationSeconds:
             kind === "panel"
               ? positiveNumber(

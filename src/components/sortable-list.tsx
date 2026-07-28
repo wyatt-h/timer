@@ -1,20 +1,30 @@
 "use client";
 
+import * as React from "react";
 import {
-  draggable,
-  dropTargetForElements,
-  monitorForElements,
-} from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { reorder } from "@atlaskit/pragmatic-drag-and-drop/reorder";
-import type { KeyboardEventHandler, RefCallback, ReactNode } from "react";
-import { useEffect, useState } from "react";
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { CSS } from "@dnd-kit/utilities";
+import { cn } from "@/lib/utils";
 
 type SortableItemControls = {
-  dragHandleRef: RefCallback<HTMLElement>;
+  dragHandleRef: (element: HTMLElement | null) => void;
+  handleProps: Record<string, unknown>;
   isDragging: boolean;
-  isDropTarget: boolean;
   disabled: boolean;
-  onHandleKeyDown: KeyboardEventHandler<HTMLElement>;
 };
 
 type SortableListProps<Item extends { id: string }> = {
@@ -23,73 +33,44 @@ type SortableListProps<Item extends { id: string }> = {
   onReorder: (items: Item[]) => void;
   isItemDisabled?: (item: Item, index: number) => boolean;
   className?: string;
-  renderItem: (item: Item, index: number, controls: SortableItemControls) => ReactNode;
+  renderItem: (item: Item, index: number, controls: SortableItemControls) => React.ReactNode;
 };
 
 function SortableRow<Item extends { id: string }>({
   item,
-  scope,
   disabled,
-  onMove,
   render,
 }: {
   item: Item;
-  scope: string;
   disabled: boolean;
-  onMove: (direction: -1 | 1) => void;
-  render: (controls: SortableItemControls) => ReactNode;
+  render: (controls: SortableItemControls) => React.ReactNode;
 }) {
-  const [element, setElement] = useState<HTMLElement | null>(null);
-  const [dragHandle, setDragHandle] = useState<HTMLElement | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isDropTarget, setIsDropTarget] = useState(false);
-
-  useEffect(() => {
-    if (!element || !dragHandle || disabled) return;
-    const cleanupDraggable = draggable({
-      element,
-      dragHandle,
-      getInitialData: () => ({ id: item.id, scope }),
-      onDragStart: () => setIsDragging(true),
-      onDrop: () => setIsDragging(false),
-    });
-    const cleanupDropTarget = dropTargetForElements({
-      element,
-      getData: () => ({ id: item.id, scope }),
-      canDrop: ({ source }) => source.data.scope === scope && source.data.id !== item.id,
-      onDragEnter: () => setIsDropTarget(true),
-      onDragLeave: () => setIsDropTarget(false),
-      onDrop: () => setIsDropTarget(false),
-    });
-
-    return () => {
-      cleanupDraggable();
-      cleanupDropTarget();
-    };
-  }, [disabled, dragHandle, element, item.id, scope]);
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.id, disabled });
 
   return (
     <div
-      ref={setElement}
-      className={`sortable-row${isDragging ? " is-dragging" : ""}${
-        isDropTarget ? " is-drop-target" : ""
-      }`}
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={cn("relative", isDragging && "z-10 opacity-40")}
     >
       {render({
-        dragHandleRef: setDragHandle,
+        dragHandleRef: setActivatorNodeRef,
+        handleProps: { ...attributes, ...listeners },
         isDragging,
-        isDropTarget,
         disabled,
-        onHandleKeyDown: (event) => {
-          if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
-          event.preventDefault();
-          onMove(event.key === "ArrowUp" ? -1 : 1);
-        },
       })}
     </div>
   );
 }
 
+/**
+ * Vertical sortable list.
+ *
+ * Dragging is bound to the handle each row opts into, so text selection and
+ * input interaction keep working everywhere else. Keyboard dragging comes
+ * from dnd-kit's sensor: focus a handle, press space, move with the arrows.
+ */
 export function SortableList<Item extends { id: string }>({
   items,
   scope,
@@ -98,44 +79,47 @@ export function SortableList<Item extends { id: string }>({
   className,
   renderItem,
 }: SortableListProps<Item>) {
-  useEffect(
-    () =>
-      monitorForElements({
-        canMonitor: ({ source }) => source.data.scope === scope,
-        onDrop: ({ source, location }) => {
-          const target = location.current.dropTargets[0];
-          const sourceIndex = items.findIndex((item) => item.id === source.data.id);
-          const targetIndex = items.findIndex((item) => item.id === target?.data.id);
-          if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return;
-          onReorder(reorder({ list: items, startIndex: sourceIndex, finishIndex: targetIndex }));
-        },
-      }),
-    [items, onReorder, scope],
+  const sensors = useSensors(
+    /* A small threshold keeps a plain click on the handle from starting a drag. */
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const from = items.findIndex((item) => item.id === active.id);
+    const to = items.findIndex((item) => item.id === over.id);
+    if (from < 0 || to < 0) return;
+    const next = [...items];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onReorder(next);
+  }
+
   return (
-    <div className={className}>
-      {items.map((item, index) => (
-        <SortableRow
-          key={item.id}
-          item={item}
-          scope={scope}
-          disabled={isItemDisabled?.(item, index) ?? false}
-          onMove={(direction) => {
-            const finishIndex = index + direction;
-            if (
-              finishIndex < 0 ||
-              finishIndex >= items.length ||
-              isItemDisabled?.(item, index) ||
-              isItemDisabled?.(items[finishIndex], finishIndex)
-            ) {
-              return;
-            }
-            onReorder(reorder({ list: items, startIndex: index, finishIndex }));
-          }}
-          render={(controls) => renderItem(item, index, controls)}
-        />
-      ))}
-    </div>
+    <DndContext
+      id={scope}
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext
+        items={items.map((item) => item.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className={className}>
+          {items.map((item, index) => (
+            <SortableRow
+              key={item.id}
+              item={item}
+              disabled={isItemDisabled?.(item, index) ?? false}
+              render={(controls) => renderItem(item, index, controls)}
+            />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
   );
 }

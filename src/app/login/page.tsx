@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Mail } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AuraMark } from "@/components/aura-mark";
+import { BrandMark } from "@/components/brand-mark";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 function LoginForm() {
@@ -32,49 +35,48 @@ function LoginForm() {
   }
 
   return (
-    <main className="landing-shell">
-      <nav className="landing-nav">
-        <AuraMark />
-        <Link className="ghost-button" href={team ? `/t/${team}` : "/"}>
-          <ArrowLeft size={14} />
-          Back
-        </Link>
+    <main className="relative isolate flex min-h-svh flex-col overflow-hidden bg-[linear-gradient(180deg,#fbfbfc_0%,#f5f4f8_100%)] px-[5vw]">
+      <nav className="flex h-[88px] w-full items-center justify-between">
+        <BrandMark />
+        <Button asChild variant="ghost" size="sm">
+          <Link href={team ? `/t/${team}` : "/"}>
+            <ArrowLeft size={14} aria-hidden />
+            Back
+          </Link>
+        </Button>
       </nav>
-      <section className="landing-content">
-        <div className="eyebrow">
-          <Mail size={15} />
-          Secure admin access
-        </div>
-        <h1 style={{ fontSize: "clamp(44px, 6vw, 72px)" }}>
-          Sign in to <span>sync.</span>
+      <section className="mx-auto flex w-[min(100%,620px)] flex-1 flex-col items-center justify-center pb-18 text-center">
+        <h1 className="mb-10 text-[clamp(2.75rem,6vw,4.5rem)] leading-[0.98] font-semibold tracking-[-0.06em]">
+          Sign in to <span className="text-violet">sync.</span>
         </h1>
-        <p className="hero-copy">
-          We&apos;ll send you a secure sign-in link. No password to remember.
-        </p>
-        <form className="team-card" onSubmit={submit}>
+        <form onSubmit={submit} className="w-[min(100%,470px)] rounded-[22px] border border-ink/8 bg-white/80 p-[18px] text-left shadow-[0_22px_70px_rgba(31,26,50,0.08)] backdrop-blur-2xl">
           {sent ? (
-            <div style={{ textAlign: "center", padding: "18px 10px" }}>
-              <strong>Check your inbox</strong>
-              <p style={{ color: "#777780", fontSize: 12, lineHeight: 1.5 }}>
+            <div className="px-2 py-4 text-center">
+              <strong className="text-[15px] font-semibold">Check your inbox</strong>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">
                 Open the link sent to {email} to finish signing in.
               </p>
             </div>
           ) : (
             <>
-              <label htmlFor="email">Email address</label>
-              <input
-                className="input"
+              <Label htmlFor="email" className="mb-1.5 block">
+                Email address
+              </Label>
+              <Input
                 id="email"
                 type="email"
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@company.com"
+                aria-label="Email address"
               />
-              {error && <p className="validation-error" style={{ fontSize: 11 }}>{error}</p>}
-              <button className="primary-button full-button" style={{ marginTop: 12 }}>
-                Email me a sign-in link
-              </button>
+              {error && (
+                <p className="mt-2.5 text-[12px] font-medium text-over">{error}</p>
+              )}
+              <Button variant="primary" className="mt-3 w-full">
+                Email me a link
+              </Button>
             </>
           )}
         </form>

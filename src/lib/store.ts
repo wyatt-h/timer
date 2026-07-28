@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import type { AgendaItem, AuraEvent, Workspace } from "@/lib/types";
+import type { AgendaItem, TimerEvent, Workspace } from "@/lib/types";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   broadcastWorkspace,
@@ -33,7 +33,6 @@ export function makeAgendaItem(kind: "single" | "panel" = "single"): AgendaItem 
   return {
     id,
     kind,
-    title: kind === "single" ? "Opening remarks" : "Panel discussion",
     durationSeconds: kind === "panel" ? 20 * 60 : 10 * 60,
     speakerDefaultSeconds: kind === "panel" ? 5 * 60 : undefined,
     speakers:
@@ -46,13 +45,12 @@ export function makeAgendaItem(kind: "single" | "panel" = "single"): AgendaItem 
   };
 }
 
-export function makeEvent(name = "Untitled event"): AuraEvent {
+export function makeEvent(name = "Untitled event"): TimerEvent {
   const first = makeAgendaItem();
   return {
     id: makeId(),
     name,
     date: new Date().toISOString().slice(0, 10),
-    location: "Main stage",
     status: "draft",
     viewerToken: makeId(),
     agenda: [first],
@@ -72,19 +70,16 @@ export function makeEvent(name = "Untitled event"): AuraEvent {
 
 function demoWorkspace(team: string): Workspace {
   const event = makeEvent("Annual Leadership Summit");
-  event.location = "Grand Hall";
   event.agenda = [
     {
       id: makeId(),
       kind: "single",
-      title: "The future, in focus",
       durationSeconds: 12 * 60,
       speakers: [{ id: makeId(), name: "Maya Chen", durationSeconds: 12 * 60 }],
     },
     {
       id: makeId(),
       kind: "panel",
-      title: "Building teams that last",
       durationSeconds: 25 * 60,
       speakerDefaultSeconds: 8 * 60,
       speakers: [
@@ -96,7 +91,6 @@ function demoWorkspace(team: string): Workspace {
     {
       id: makeId(),
       kind: "single",
-      title: "Closing perspective",
       durationSeconds: 8 * 60,
       speakers: [{ id: makeId(), name: "Elena Park", durationSeconds: 8 * 60 }],
     },
@@ -106,7 +100,6 @@ function demoWorkspace(team: string): Workspace {
   const completed = makeEvent("Spring Product Forum");
   completed.status = "completed";
   completed.date = new Date(Date.now() - 1000 * 60 * 60 * 24 * 36).toISOString().slice(0, 10);
-  completed.location = "Studio Two";
 
   return { team, events: [event, completed], updatedAt: Date.now() };
 }
@@ -156,7 +149,7 @@ export function persistWorkspace(workspace: Workspace) {
   }
 }
 
-export function findEventByToken(token: string): { workspace: Workspace; event: AuraEvent } | null {
+export function findEventByToken(token: string): { workspace: Workspace; event: TimerEvent } | null {
   if (typeof window === "undefined") return null;
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = window.localStorage.key(index);
@@ -267,7 +260,7 @@ export function usePublicEvent(token: string) {
           .channel(`event:${token}`)
           .on("broadcast", { event: "state" }, ({ payload }) => {
             if (!payload?.event || !payload?.team) return;
-            const event = payload.event as AuraEvent;
+            const event = payload.event as TimerEvent;
             setResult({
               workspace: { team: payload.team, events: [event], updatedAt: Date.now() },
               event,

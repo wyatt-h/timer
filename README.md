@@ -1,6 +1,6 @@
-# Aura Timer
+# Timer
 
-Aura Timer is a focused event timer for single speakers and multi-speaker panels. An administrator controls the active timer while any number of audience displays follow along through one shareable link.
+Timer is a focused event timer for single speakers and multi-speaker panels. An administrator controls the active timer while any number of audience displays follow along through one shareable link.
 
 ## What is included
 
@@ -8,11 +8,12 @@ Aura Timer is a focused event timer for single speakers and multi-speaker panels
 - Event dashboard and event builder
 - Edit existing events at any time
 - CSV batch import for one or multiple events
-- Single-speaker and panel agenda items
+- Single-speaker and panel agenda items, identified by speaker name
 - Independent panel-total and per-speaker timing
 - Configurable default panelist duration
 - Start, pause, reset, skip, and time-adjustment controls
-- Drag-to-reorder and inline editing for upcoming live agenda items
+- Drag-to-reorder with drop indicators and inline editing for upcoming live agenda items
+- Keyboard shortcuts and a focus mode for the live console
 - Compact live control room with a wall clock
 - Fullscreen audience display
 - Realtime Supabase Broadcast updates with a one-second durable-state fallback
@@ -38,11 +39,13 @@ Open `http://localhost:3000`, enter a lowercase team name, and use the generated
 4. Add the project URL and public anonymous key.
 5. In Supabase Authentication, add `http://localhost:3000/auth/callback` and the production callback URL to the allowed redirect URLs.
 
-Once configured, admins can sign in with an email link. Their local workspace is uploaded the first time they sign in. Timer state is saved as authoritative timestamps, which keeps viewers accurate even after reconnecting.
+Once configured, admins can sign in with an email link at `/login`. Their local workspace is uploaded the first time they sign in. Timer state is saved as authoritative timestamps, which keeps viewers accurate even after reconnecting.
+
+Note that no button links to `/login` — the header sync control was removed in favour of a minimal interface, so the route must be visited directly.
 
 ## CSV event import
 
-Use the **Import CSV** button on the event dashboard. A file can contain one event or several events grouped by `event_name`. Download `public/event-import-template.csv` for the supported columns and an example containing both a single speaker and a panel.
+Use the **Import CSV** button on the event dashboard. A file can contain one event or several events grouped by `event_name`. Rows sharing an `item_order` value become a single agenda item, which is how a panel's panelists are grouped — without `item_order`, every row becomes its own item. Agenda items have no titles; they are identified by their speakers. Download `public/event-import-template.csv` for the supported columns and an example containing both a single speaker and a panel.
 
 ## Deploy to Vercel
 

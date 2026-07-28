@@ -6,15 +6,24 @@ export interface Speaker {
   id: string;
   name: string;
   durationSeconds: number;
+  /** Silences this speaker's end chime. Speakers chime by default. */
+  soundMuted?: boolean;
 }
 
 export interface AgendaItem {
   id: string;
   kind: AgendaKind;
-  title: string;
   durationSeconds: number;
   speakerDefaultSeconds?: number;
   speakers: Speaker[];
+  /** Who runs the panel. Not a timed slot — the host does not take a turn. */
+  host?: string;
+  /**
+   * Silences the whole-panel end chime. Undefined means muted for a panel:
+   * the panel total is context, and a chime for it would fire in the middle
+   * of somebody speaking.
+   */
+  soundMuted?: boolean;
 }
 
 export interface RuntimeState {
@@ -25,14 +34,19 @@ export interface RuntimeState {
   panelStatus?: TimerStatus | null;
   panelRemainingSeconds?: number | null;
   panelEndsAt?: number | null;
+  /**
+   * Whether audience displays should chime at all. Broadcast with the rest of
+   * the runtime so every screen follows the control room. Undefined means on,
+   * which keeps events created before this setting behaving as they did.
+   */
+  soundEnabled?: boolean;
   updatedAt: number;
 }
 
-export interface AuraEvent {
+export interface TimerEvent {
   id: string;
   name: string;
   date: string;
-  location: string;
   status: EventStatus;
   viewerToken: string;
   agenda: AgendaItem[];
@@ -42,14 +56,13 @@ export interface AuraEvent {
 
 export interface Workspace {
   team: string;
-  events: AuraEvent[];
+  events: TimerEvent[];
   updatedAt: number;
 }
 
 export interface TimerSegment {
   id: string;
   agendaItemId: string;
-  title: string;
   speaker: string;
   durationSeconds: number;
   kind: AgendaKind;

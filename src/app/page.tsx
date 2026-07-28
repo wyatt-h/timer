@@ -1,12 +1,11 @@
 "use client";
 
-import { ArrowRight, Check, TimerReset } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AuraMark } from "@/components/aura-mark";
+import { BrandMark } from "@/components/brand-mark";
+import { Button } from "@/components/ui/button";
 import { ensureWorkspace, isValidTeamSlug, sanitizeTeamSlug } from "@/lib/store";
-
-const features = ["Realtime audience display", "Built for every screen", "No viewer sign-in"];
 
 export default function Home() {
   const router = useRouter();
@@ -29,38 +28,30 @@ export default function Home() {
   }
 
   return (
-    <main className="landing-shell">
-      <div className="ambient ambient-one" />
-      <div className="ambient ambient-two" />
+    <main className="relative isolate flex min-h-svh flex-col overflow-hidden bg-[radial-gradient(circle_at_52%_40%,rgba(255,255,255,0.95),transparent_35%),linear-gradient(180deg,#fbfbfc_0%,#f5f4f8_100%)] px-[5vw]">
+      {/* A single soft wash. Two competing gradients read as decoration. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-[22vw] -right-[16vw] -z-10 size-[46vw] rounded-full bg-[radial-gradient(circle,rgba(159,134,255,0.2),transparent_68%)] blur-[14px]"
+      />
 
-      <nav className="landing-nav" aria-label="Main navigation">
-        <AuraMark />
-        <div className="live-pill">
-          <span className="live-dot" />
-          Realtime ready
-        </div>
+      <nav className="flex h-[88px] w-full items-center" aria-label="Main navigation">
+        <BrandMark />
       </nav>
 
-      <section className="landing-content">
-        <div className="eyebrow">
-          <TimerReset size={15} strokeWidth={2.2} />
-          Time, beautifully managed
-        </div>
-        <h1>
+      <section className="mx-auto flex w-[min(100%,620px)] flex-1 flex-col items-center justify-center pt-14 pb-18 text-center">
+        <h1 className="mb-10 text-[clamp(3.25rem,7.2vw,5.5rem)] leading-[0.96] font-semibold tracking-[-0.065em] text-[#151519]">
           Every moment,
           <br />
-          perfectly <span>timed.</span>
+          perfectly <span className="text-violet">timed.</span>
         </h1>
-        <p className="hero-copy">
-          A focused event timer for teams who care about staying on schedule
-          without getting in the way of the room.
-        </p>
 
-        <form className="team-card" onSubmit={submit}>
-          <label htmlFor="team-name">Enter your team name</label>
-          <div className="team-input-row">
-            <div className="team-input-wrap">
-              <span>aura.app/</span>
+        <form
+          onSubmit={submit}
+          className="w-[min(100%,470px)] rounded-[22px] border border-ink/8 bg-white/80 p-[18px] text-left shadow-[0_22px_70px_rgba(31,26,50,0.08),inset_0_1px_rgba(255,255,255,0.9)] backdrop-blur-2xl"
+        >
+          <div className="flex gap-2">
+            <div className="flex min-w-0 flex-1 items-center overflow-hidden rounded-[13px] border border-ink/10 bg-white transition-[border-color,box-shadow] duration-150 focus-within:border-violet/55 focus-within:ring-4 focus-within:ring-violet/10">
               <input
                 id="team-name"
                 value={team}
@@ -69,53 +60,49 @@ export default function Home() {
                   setTouched(false);
                 }}
                 onBlur={() => setTouched(true)}
-                placeholder="yourteam"
+                placeholder="Your team name"
+                aria-label="Team name"
                 autoComplete="organization"
                 autoCapitalize="none"
                 spellCheck={false}
                 aria-describedby="team-hint"
+                className="h-[49px] w-full min-w-0 border-0 bg-transparent px-4 text-[14px] font-semibold text-[#242429] outline-none placeholder:font-normal placeholder:text-text-subtle/70"
               />
             </div>
-            <button className="primary-button icon-button" type="submit" aria-label="Continue">
-              <ArrowRight size={20} />
-            </button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="icon"
+              aria-label="Continue"
+              className="size-[49px]"
+            >
+              <ArrowRight size={20} aria-hidden />
+            </Button>
           </div>
-          <div className="team-meta" id="team-hint">
-            <span className={touched && !valid ? "validation-error" : ""}>
-              {touched && !valid
-                ? "Use lowercase letters only"
-                : "Lowercase letters, no spaces"}
-            </span>
+
+          {/* Speaks up only when something is wrong, or when there is a shortcut. */}
+          <div id="team-hint" className="mx-1 flex justify-between text-[12px] empty:hidden">
+            {touched && !valid && (
+              <span className="mt-2 text-over">Lowercase letters only</span>
+            )}
             {recentTeam && recentTeam !== team && (
               <button
                 type="button"
-                className="text-button"
                 onClick={() => {
                   setTeam(recentTeam);
                   setTouched(false);
                 }}
+                className="mt-2 ml-auto font-semibold text-violet hover:underline"
               >
                 Use {recentTeam}
               </button>
             )}
           </div>
         </form>
-
-        <div className="feature-row" aria-label="Product features">
-          {features.map((feature) => (
-            <span key={feature}>
-              <i>
-                <Check size={12} strokeWidth={3} />
-              </i>
-              {feature}
-            </span>
-          ))}
-        </div>
       </section>
 
-      <footer className="landing-footer">
-        <span>Aura Timer</span>
-        <span>Made for moments that matter</span>
+      <footer className="flex min-h-[62px] w-full items-center text-[12px] text-text-subtle">
+        <span>Timer</span>
       </footer>
     </main>
   );
