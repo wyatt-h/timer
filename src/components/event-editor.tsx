@@ -194,9 +194,6 @@ export function EventEditor() {
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="flex items-center gap-2">
-              <Button variant="secondary" onClick={() => save(false)}>
-                Save changes
-              </Button>
               {hasUnsavedChanges && (
                 <span
                   role="status"
@@ -206,6 +203,9 @@ export function EventEditor() {
                   Unsaved changes
                 </span>
               )}
+              <Button variant="secondary" onClick={() => save(false)}>
+                Save changes
+              </Button>
             </div>
             <Button variant="primary" onClick={() => save(true)}>
               {draft.status === "live" ? "Return to control" : "Start event"}
