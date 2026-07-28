@@ -69,7 +69,7 @@ export function SortableAgendaItem({
       className={cn("group/card", isDragging && "opacity-40")}
     >
       <Card className="overflow-hidden transition-[border-color,box-shadow] duration-200 ease-[var(--ease-out-quart)] hover:border-violet/20 hover:shadow-[0_6px_20px_-6px_rgba(32,26,56,0.14)] focus-within:border-violet/25">
-        <CardHeader className="flex-wrap justify-between gap-x-2 gap-y-2.5 border-b border-line-soft bg-surface-raised/60">
+        <CardHeader className="flex-wrap justify-between gap-x-2 gap-y-2 border-b border-line-soft bg-surface-raised/60 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
             <DragHandle
               ref={setActivatorNodeRef}
@@ -129,7 +129,7 @@ export function SortableAgendaItem({
           </div>
         </CardHeader>
 
-        <CardContent className="pt-4">{children}</CardContent>
+        <CardContent className="px-3 pt-3 pb-3">{children}</CardContent>
       </Card>
 
       {/*

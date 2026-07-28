@@ -136,7 +136,7 @@ export function AgendaEditor({ defaultValues, onChange }: AgendaEditorProps) {
     <TooltipProvider>
       <section
         aria-labelledby="agenda-editor-heading"
-        className="grid gap-4 [--field-name:320px] [--panelist-name:300px]"
+        className="grid gap-3.5 [--panelist-name:300px]"
       >
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -187,7 +187,7 @@ export function AgendaEditor({ defaultValues, onChange }: AgendaEditorProps) {
               items={items.map((item) => item.id)}
               strategy={verticalListSortingStrategy}
             >
-              <ul className="grid list-none gap-3 p-0">
+              <ul className="grid list-none gap-2.5 p-0">
                 {items.map((item, index) => (
                   <SortableAgendaItem
                     key={item.id}

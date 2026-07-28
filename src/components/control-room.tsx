@@ -495,8 +495,8 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
    */
   const runWorkspace = useMemo(
     () => (
-    <section className={cn("min-h-[calc(100svh-7.875rem)] rounded-panel border border-line bg-white/95 p-6 shadow-[0_12px_34px_rgba(26,22,42,0.045)]", isFocused && "hidden")}>
-      <div className="mb-5 flex items-end justify-between gap-5">
+    <section className={cn("min-h-[calc(100svh-7.875rem)] rounded-panel border border-line bg-white/95 p-5 shadow-[0_12px_34px_rgba(26,22,42,0.045)]", isFocused && "hidden")}>
+      <div className="mb-4 flex items-end justify-between gap-5">
         <div>
           <h2 className="text-[24px] font-semibold tracking-[-0.045em]">Up next</h2>
         </div>
@@ -506,7 +506,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
       </div>
 
       <SortableList
-        className="grid gap-2.5"
+        className="grid gap-2"
         items={event.agenda}
         scope={`live-agenda-${event.id}`}
         isItemDisabled={(_, itemIndex) => itemIndex <= currentAgendaIndex}
@@ -518,7 +518,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
           return (
             <article
               className={cn(
-                "grid grid-cols-[2.25rem_minmax(0,1fr)] gap-3 rounded-card border border-line bg-white p-4",
+                "grid grid-cols-[2.25rem_minmax(0,1fr)] gap-2.5 rounded-card border border-line bg-white p-3",
                 "transition-[border-color,box-shadow,opacity] duration-150",
                 isCurrent &&
                   "border-violet/30 bg-gradient-to-br from-[#fbfaff] to-[#f4f1ff] shadow-[0_8px_26px_rgba(91,61,196,0.08)]",
@@ -542,7 +542,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                 )}
               </div>
               <div className="min-w-0">
-                <div className="mb-2.5 flex items-center gap-2">
+                <div className="mb-1.5 flex items-center gap-2">
                   <span className={cn("inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold capitalize", item.kind === "panel" ? "bg-violet-soft text-violet-dark" : "bg-[#eaf0ff] text-[#3f558f]")}>
                     {item.kind === "panel" ? <UsersRound size={11} /> : <UserRound size={11} />}
                     {item.kind === "panel" ? "Panel" : "Speaker"}
@@ -576,9 +576,9 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                         <Trash2 size={14} />
                       </button>
                     </div>
-                    <div className="mt-2 grid gap-1.5 rounded-control border border-line-soft bg-surface-sunken p-2.5">
+                    <div className="mt-1.5 grid gap-1 rounded-control border border-line-soft bg-surface-sunken p-2">
                       {item.kind === "panel" && (
-                        <label className="grid grid-cols-[auto_minmax(0,320px)] items-center gap-2.5 px-0.5 pt-0.5 pb-2 text-[12px] font-semibold text-text-muted">
+                        <label className="grid grid-cols-[auto_minmax(0,320px)] items-center gap-2.5 px-0.5 pb-1.5 text-[12px] font-semibold text-text-muted">
                           <span className="text-[12px] font-semibold">Host</span>
                           <input
                             className="h-9 w-full min-w-0 rounded-field border border-line bg-surface-raised px-3 text-[13px] outline-none transition-[border-color,box-shadow] duration-150 focus-visible:border-violet/50 focus-visible:ring-[3px] focus-visible:ring-violet/20"
@@ -592,7 +592,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                         </label>
                       )}
                       {item.kind === "panel" && (
-                        <div className="flex items-center gap-2.5 px-0.5 pt-0.5 pb-2.5 text-[12px] text-text-muted">
+                        <div className="flex items-center gap-2.5 px-0.5 pb-1.5 text-[12px] text-text-muted">
                           <span className="mr-auto text-[12px] font-semibold">Default per panelist</span>
                           <label className="flex items-center gap-1.5 text-[12px] whitespace-nowrap text-text-subtle">
                             <DurationInput
@@ -621,15 +621,21 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
                         </div>
                       )}
                       <SortableList
-                        className="grid gap-1.5"
+                        className="grid gap-1"
                         items={item.speakers}
                         scope={`live-panelists-${item.id}`}
                         onReorder={(speakers) => patchAgendaItem(item.id, { speakers })}
                         renderItem={(speaker, speakerIndex, controls) => (
                           <div
-                            className={`future-speaker-row${
-                              item.kind === "panel" ? " panel" : ""
-                            }`}
+                            className={cn(
+                              "grid items-center gap-2",
+                              /* Panelists get a handle column; a lone speaker
+                                 has nothing to reorder against. */
+                              item.kind === "panel"
+                                ? "grid-cols-[2.25rem_minmax(0,17.5rem)_auto_auto]"
+                                : "grid-cols-[minmax(0,17.5rem)_auto_auto]",
+                              "justify-start max-sm:grid-cols-[minmax(0,1fr)_auto_auto]",
+                            )}
                           >
                             {item.kind === "panel" && (
                               <button

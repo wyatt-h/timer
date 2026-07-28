@@ -37,12 +37,12 @@ export function SpeakerFields({
   const durationId = `${itemId}-speaker-duration`;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-[minmax(0,var(--field-name))_auto] sm:items-start">
+    <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
       <div className="min-w-0">
         <Label htmlFor={nameId}>Speaker</Label>
         <Input
           id={nameId}
-          className="mt-1.5"
+          className="mt-1 h-10"
           placeholder="Who is speaking"
           value={name}
           aria-invalid={nameError ? true : undefined}
@@ -55,10 +55,10 @@ export function SpeakerFields({
 
       <div>
         <Label htmlFor={durationId}>Duration</Label>
-        <div className="mt-1.5 flex items-center gap-2">
+        <div className="mt-1 flex items-center gap-2">
           <DurationField
             id={durationId}
-            className="w-[86px]"
+            className="h-10 w-[86px]"
             value={durationMinutes}
             invalid={Boolean(durationError)}
             aria-describedby={durationError ? `${durationId}-error` : undefined}

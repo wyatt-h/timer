@@ -97,13 +97,13 @@ export function PanelFields({
   }
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,var(--field-name))_auto] sm:items-start">
+    <div className="grid gap-3">
+      <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
         <div className="min-w-0">
           <Label htmlFor={hostId}>Panel host</Label>
           <Input
             id={hostId}
-            className="mt-1.5"
+            className="mt-1 h-10"
             placeholder="Who runs this panel"
             value={host}
             aria-invalid={errors.host ? true : undefined}
@@ -116,10 +116,10 @@ export function PanelFields({
 
         <div>
           <Label htmlFor={durationId}>Panel total</Label>
-          <div className="mt-1.5 flex items-center gap-2">
+          <div className="mt-1 flex items-center gap-2">
             <DurationField
               id={durationId}
-              className="w-[86px]"
+              className="h-10 w-[86px]"
               value={durationMinutes}
               invalid={Boolean(errors.duration)}
               aria-describedby={errors.duration ? `${durationId}-error` : undefined}
@@ -138,12 +138,12 @@ export function PanelFields({
         */}
       <section
         aria-label="Panelists"
-        className="rounded-card border border-line-soft bg-surface-sunken p-3 sm:p-3.5"
+        className="rounded-card border border-line-soft bg-surface-sunken p-2.5 sm:p-3"
       >
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 px-1.5">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-1">
           <div>
             <Label htmlFor={defaultId}>Default per panelist</Label>
-            <div className="mt-1.5 flex items-center gap-2">
+            <div className="mt-1 flex items-center gap-2">
               <DurationField
                 id={defaultId}
                 className="h-9 w-[74px] bg-white"
