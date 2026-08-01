@@ -60,6 +60,8 @@ Import the GitHub repository into Vercel and add:
 
 Set `NEXT_PUBLIC_SITE_URL` to the production URL. Vercel detects the Next.js application automatically.
 
+Vercel installs with `npm ci`, so every `resolved` URL in `package-lock.json` must point at `registry.npmjs.org`. Installing behind an internal registry mirror writes that mirror's hostname into the lock file, and the build then fails with `ENOTFOUND`. Rewrite the host and keep the integrity hash, which is the publish-time hash either way.
+
 ## Data model
 
 The database uses `teams`, `team_members`, `events`, `agenda_items`, `speakers`, and `event_runtime`. Access is restricted to team members. Public audience data is exposed only through an unguessable viewer token and a narrow security-definer database function. An event also carries an optional `zoom_token`, the pairing code used by the Zoom App, read through a second security-definer function of the same shape.
