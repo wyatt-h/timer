@@ -27,6 +27,7 @@ function fakeSdk(overrides: Partial<Record<string, unknown>> = {}) {
     getSupportedJsApis: vi.fn(async () => ({ supportedApis: [...ZOOM_CAPABILITIES] })),
     getRunningContext: vi.fn(async () => ({ context: "inMeeting" })),
     setDynamicIndicator: vi.fn(async () => ({ message: "Success" })),
+    setDynamicIndicatorStyle: vi.fn(async () => ({ message: "Success" })),
     extendDynamicIndicator: vi.fn(async () => ({ message: "Success" })),
     removeDynamicIndicator: vi.fn(async () => ({ message: "Success" })),
     getDynamicIndicator: vi.fn(async () => ({
@@ -111,6 +112,7 @@ describe("configuration", () => {
     expect(first).toBe(second);
     expect(first.availability).toBe("ready");
     expect(first.canPublish).toBe(true);
+    expect(first.canStyle).toBe(true);
   });
 
   it("never resolves a promise with the SDK instance itself", async () => {
@@ -215,6 +217,26 @@ describe("configuration", () => {
     expect(environment.canExtend).toBe(false);
   });
 
+  it("keeps timer publishing available when only live restyling is unsupported", async () => {
+    install(fakeSdk({
+      config: vi.fn(async () => ({
+        runningContext: "inMeeting",
+        unsupportedApis: ["setDynamicIndicatorStyle"],
+        clientVersion: "5.17.4",
+        browserVersion: "cef/110",
+        product: "desktop",
+      })),
+      getSupportedJsApis: vi.fn(async () => ({
+        supportedApis: ZOOM_CAPABILITIES.filter((api) => api !== "setDynamicIndicatorStyle"),
+      })),
+    }));
+
+    const environment = await initZoomSdk();
+
+    expect(environment.canPublish).toBe(true);
+    expect(environment.canStyle).toBe(false);
+  });
+
   it("re-reads the context after the operator joins a meeting", async () => {
     const sdk = install(fakeSdk({
       config: vi.fn(async () => ({
@@ -240,7 +262,7 @@ describe("commands", () => {
     await initZoomSdk();
 
     const outcome = await publishZoomCommand(
-      { kind: "start", remainingSeconds: 299.4, label: "Maya Chen" },
+      { kind: "start", remainingSeconds: 299.4, label: "Maya Chen", tone: "normal" },
       1,
     );
 
@@ -249,11 +271,12 @@ describe("commands", () => {
       timer: {
         action: "start",
         direction: "down",
-        start: 300,
+        start: 299_400,
         withSound: false,
-        countNegativeAfterAlarm: false,
+        countNegativeAfterAlarm: true,
         showNotification: false,
       },
+      borderColor: "#00D96F",
     });
   });
 
@@ -264,11 +287,13 @@ describe("commands", () => {
     await publishZoomCommand({ kind: "pause" }, 1);
     await publishZoomCommand({ kind: "resume" }, 2);
     await publishZoomCommand({ kind: "extend", seconds: 15 }, 3);
-    await publishZoomCommand({ kind: "remove" }, 4);
+    await publishZoomCommand({ kind: "style", tone: "caution" }, 4);
+    await publishZoomCommand({ kind: "remove" }, 5);
 
     expect(sdk.setDynamicIndicator).toHaveBeenNthCalledWith(1, { timer: { action: "pause" } });
     expect(sdk.setDynamicIndicator).toHaveBeenNthCalledWith(2, { timer: { action: "resume" } });
-    expect(sdk.extendDynamicIndicator).toHaveBeenCalledWith({ extendDuration: 15 });
+    expect(sdk.extendDynamicIndicator).toHaveBeenCalledWith({ extendDuration: 15_000 });
+    expect(sdk.setDynamicIndicatorStyle).toHaveBeenCalledWith({ borderColor: "#FFB000" });
     expect(sdk.removeDynamicIndicator).toHaveBeenCalledTimes(1);
   });
 
@@ -303,7 +328,7 @@ describe("commands", () => {
 
     // Both derive from the same revision, so neither supersedes the other.
     const first = publishZoomCommand(
-      { kind: "start", remainingSeconds: 60, label: "Maya Chen" },
+      { kind: "start", remainingSeconds: 60, label: "Maya Chen", tone: "normal" },
       7,
     );
     const second = publishZoomCommand({ kind: "remove" }, 7);
@@ -323,7 +348,7 @@ describe("commands", () => {
 
     const newer = publishZoomCommand({ kind: "remove" }, 20);
     const stale = publishZoomCommand(
-      { kind: "start", remainingSeconds: 60, label: "Maya Chen" },
+      { kind: "start", remainingSeconds: 60, label: "Maya Chen", tone: "normal" },
       5,
     );
 
@@ -345,7 +370,7 @@ describe("commands", () => {
     await initZoomSdk();
 
     const outcome = await publishZoomCommand(
-      { kind: "start", remainingSeconds: 60, label: "Maya Chen" },
+      { kind: "start", remainingSeconds: 60, label: "Maya Chen", tone: "normal" },
       1,
     );
 
@@ -365,7 +390,10 @@ describe("commands", () => {
     }));
     await initZoomSdk();
 
-    await publishZoomCommand({ kind: "start", remainingSeconds: 60, label: "A" }, 1);
+    await publishZoomCommand(
+      { kind: "start", remainingSeconds: 60, label: "A", tone: "normal" },
+      1,
+    );
     const after = await publishZoomCommand({ kind: "remove" }, 2);
 
     expect(after.status).toBe("applied");

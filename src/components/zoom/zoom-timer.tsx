@@ -45,6 +45,7 @@ const LOADING_ENVIRONMENT: ZoomEnvironment = {
   missingCapabilities: [],
   canPublish: false,
   canExtend: false,
+  canStyle: false,
   error: null,
 };
 

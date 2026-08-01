@@ -1449,6 +1449,7 @@ function LiveConsole({
 
           <ControllerAccessCard
             eventId={event.id}
+            eventName={event.name}
             onSignOut={() => {
               setAccessError("");
               void onSignOut({ discardUnsaved: signOutConfirmed }).then((result) => {

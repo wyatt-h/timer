@@ -6,6 +6,7 @@ Timer is a focused event timer for single speakers and multi-speaker panels. An 
 
 - Independent events: no teams, no accounts, no workspace to belong to
 - Per-event access: the event name and a password of at least six characters
+- One-time, 24-hour invitation links that open an event without exposing its password
 - Event builder, reachable straight from the home screen
 - Edit existing events at any time
 - CSV batch import for one or multiple events
@@ -34,6 +35,10 @@ is created, and the event name is its globally unique sign-in identifier.
   characters is chosen in the builder.
 - **Open an event** on another device needs the event name and password. Names are
   matched without regard to capitalization or repeated spaces.
+- A signed-in device can create a **one-time invitation link**. It expires after
+  24 hours, is consumed by the first recipient, and can be revoked before use.
+  Opening it creates the recipient's normal event session and remembers the event
+  under **On this device**. Creating a replacement revokes the older link.
 - A controller signed in to one event cannot see, read, or change another. Every
   request proves a session for the exact event it names.
 - Signing in sets an HTTP-only, `SameSite=Lax`, `Secure`-in-production cookie
@@ -183,10 +188,11 @@ Vercel installs with `npm ci`, so every `resolved` URL in `package-lock.json` mu
 events
   ├── agenda_items ── speakers
   ├── event_runtime
-  └── event_access ── event_sessions
+  ├── event_access ── event_sessions
+  └── event_invites
 ```
 
-Seven tables, and no team among them. An event is owned by its `event_access`
+Eight tables, and no team among them. An event is owned by its `event_access`
 record and by nothing else; a row in `event_sessions` grants access to exactly one
 event. `events` carries no `team_id` and no `created_by`, and no event table
 references `auth.users`.
@@ -195,7 +201,7 @@ references `auth.users`.
 last read, the write increments it only on a match, and a mismatch returns 409 so a
 second device's work is never silently overwritten.
 
-`event_access`, `event_sessions` and `event_auth_attempts` have Row Level Security
+`event_access`, `event_sessions`, `event_invites` and `event_auth_attempts` have Row Level Security
 enabled, no policies, and every privilege revoked from `anon` and `authenticated` —
 the browser cannot reach a credential, a session or a rate-limit row at all.
 `events`, `agenda_items`, `speakers` and `event_runtime` are the same: RLS on, no
@@ -247,6 +253,7 @@ setDynamicIndicator
 getDynamicIndicator
 removeDynamicIndicator
 extendDynamicIndicator
+setDynamicIndicatorStyle
 onSetDynamicIndicator
 onRemoveDynamicIndicator
 onExtendDynamicIndicator
@@ -267,10 +274,13 @@ use generic public error messages, and never return a database message.
 | `POST /api/event-auth/create` | none — public, rate-limited. Takes the event and password, derives access from the event name, and sets the event session cookie |
 | `POST /api/event-auth/login` | event name + password, rate-limited. Returns only that event |
 | `POST /api/event-auth/logout` | the session cookie for the named event; clears it and no other |
+| `POST /api/event-auth/redeem-invite` | a valid, unused invitation token; consumes it and creates the recipient's event session |
 | `POST /api/event-auth/change-password` | a valid session for the event, plus the current password |
 | `GET /api/events/:eventId` | a valid session for that exact event |
 | `PUT /api/events/:eventId` | a valid session for that exact event, plus the version last read |
 | `DELETE /api/events/:eventId` | a valid session for that exact event |
+| `POST /api/events/:eventId/invites` | a valid session; creates one 24-hour link and revokes any older outstanding link |
+| `DELETE /api/events/:eventId/invites` | a valid session; revokes the named unused invitation |
 
 No endpoint lists events; every read is addressed by one id and gated by that id's
 session. `login` never accepts an event id as proof of anything. An unknown event name and a

@@ -18,7 +18,7 @@ import { supabaseAdmin } from "@/lib/server/supabase-admin";
  * the small space of possible addresses.
  */
 
-export type RateLimitScope = "login" | "create";
+export type RateLimitScope = "login" | "create" | "invite";
 
 type Budget = { windowSeconds: number; maxAttempts: number };
 
@@ -27,6 +27,8 @@ const BUDGETS: Record<RateLimitScope, Budget> = {
   login: { windowSeconds: 15 * 60, maxAttempts: 10 },
   /* Creation is public; this is the brake on scripted event creation. */
   create: { windowSeconds: 60 * 60, maxAttempts: 20 },
+  /* Tokens are unguessable; this limits database work rather than token guessing. */
+  invite: { windowSeconds: 15 * 60, maxAttempts: 20 },
 };
 
 /**

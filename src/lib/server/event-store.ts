@@ -177,3 +177,64 @@ export async function deleteControllerEvent(eventId: string): Promise<boolean> {
   if (error) throw new EventAuthError("internal");
   return (data as { status?: string } | null)?.status === "deleted";
 }
+
+export type EventInvite = {
+  inviteId: string;
+  expiresAt: string;
+};
+
+/** Replaces any outstanding invitation for this event and returns its metadata. */
+export async function createEventInvite(input: {
+  eventId: string;
+  tokenHash: string;
+  ttlSeconds: number;
+}): Promise<EventInvite | null> {
+  const { data, error } = await supabaseAdmin().rpc("create_event_invite", {
+    p_event_id: input.eventId,
+    p_token_hash: input.tokenHash,
+    p_ttl_seconds: input.ttlSeconds,
+  });
+  if (error) throw new EventAuthError("internal");
+  const result = data as {
+    status?: string;
+    inviteId?: string;
+    expiresAt?: string;
+  } | null;
+  if (result?.status === "not_found") return null;
+  if (
+    result?.status !== "created" ||
+    typeof result.inviteId !== "string" ||
+    typeof result.expiresAt !== "string"
+  ) {
+    throw new EventAuthError("internal");
+  }
+  return { inviteId: result.inviteId, expiresAt: result.expiresAt };
+}
+
+export async function revokeEventInvite(eventId: string, inviteId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin().rpc("revoke_event_invite", {
+    p_event_id: eventId,
+    p_invite_id: inviteId,
+  });
+  if (error) throw new EventAuthError("internal");
+  return (data as { status?: string } | null)?.status === "revoked";
+}
+
+export async function redeemEventInvite(input: {
+  tokenHash: string;
+  sessionTokenHash: string;
+  sessionTtlSeconds: number;
+}): Promise<{ eventId: string; payload: ControllerEvent } | null> {
+  const { data, error } = await supabaseAdmin().rpc("redeem_event_invite", {
+    p_token_hash: input.tokenHash,
+    p_session_token_hash: input.sessionTokenHash,
+    p_session_ttl_seconds: input.sessionTtlSeconds,
+  });
+  if (error) throw new EventAuthError("internal");
+  const result = data as { status?: string; eventId?: string; payload?: unknown } | null;
+  if (result?.status === "invalid") return null;
+  if (result?.status !== "redeemed" || typeof result.eventId !== "string") {
+    throw new EventAuthError("internal");
+  }
+  return { eventId: result.eventId, payload: payloadOrThrow(result.payload) };
+}

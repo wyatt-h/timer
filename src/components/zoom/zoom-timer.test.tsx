@@ -66,6 +66,7 @@ function fakeSdk(configImplementation?: () => Promise<unknown>) {
         "getDynamicIndicator",
         "removeDynamicIndicator",
         "extendDynamicIndicator",
+        "setDynamicIndicatorStyle",
         "onSetDynamicIndicator",
         "onRemoveDynamicIndicator",
         "onExtendDynamicIndicator",
@@ -75,6 +76,7 @@ function fakeSdk(configImplementation?: () => Promise<unknown>) {
     setDynamicIndicator: vi.fn<(options: unknown) => Promise<{ message: string }>>(async () => ({
       message: "Success",
     })),
+    setDynamicIndicatorStyle: vi.fn(async () => ({ message: "Success" })),
     extendDynamicIndicator: vi.fn(async () => ({ message: "Success" })),
     removeDynamicIndicator: vi.fn(async () => ({ message: "Success" })),
     getDynamicIndicator: vi.fn(async () => ({ participantUUID: "u", screenName: "Operator" })),
@@ -185,8 +187,9 @@ describe("ZoomTimer inside a meeting", () => {
       direction: "down",
       withSound: false,
     });
-    expect(options.timer.start).toBeGreaterThan(115);
-    expect(options.timer.start).toBeLessThanOrEqual(120);
+    expect(options.timer.start).toBeGreaterThan(115_000);
+    expect(options.timer.start).toBeLessThanOrEqual(120_000);
+    expect(options).toHaveProperty("borderColor", "#00D96F");
 
     expect(
       await screen.findByText("Everyone in this meeting can see this timer."),

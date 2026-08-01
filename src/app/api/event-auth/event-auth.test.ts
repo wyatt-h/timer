@@ -33,6 +33,8 @@ const { POST: createRoute } = await import("@/app/api/event-auth/create/route");
 const { POST: loginRoute } = await import("@/app/api/event-auth/login/route");
 const { POST: changePasswordRoute } = await import("@/app/api/event-auth/change-password/route");
 const eventRoute = await import("@/app/api/events/[eventId]/route");
+const inviteRoute = await import("@/app/api/events/[eventId]/invites/route");
+const { POST: redeemInviteRoute } = await import("@/app/api/event-auth/redeem-invite/route");
 const { sessionCookieName, SESSION_TTL_SECONDS } = await import("@/lib/server/session");
 
 const PASSWORD = "secret";
@@ -328,6 +330,92 @@ describe("passwords and sessions", () => {
     cookieJar.clear();
     expect((await login("Summit", PASSWORD)).response.status).toBe(401);
     expect((await login("Summit", "newone")).response.status).toBe(200);
+  });
+});
+
+describe("event invitations", () => {
+  it("creates a one-time link without storing its raw token, then opens the event", async () => {
+    const created = await createEvent("Invited Event");
+    const invitation = await inviteRoute.POST(
+      new Request(`http://localhost/api/events/${created.event.id}/invites`, { method: "POST" }),
+      context(created.event.id),
+    );
+    applyCookies(invitation);
+    const invitationBody = await read(invitation);
+    const inviteUrl = String(invitationBody.inviteUrl);
+    const token = inviteUrl.split("#")[1];
+
+    expect(invitation.status).toBe(201);
+    expect(new URL(inviteUrl).pathname).toBe("/invite");
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const stored = await one<{ token_hash: string }>(
+      db,
+      `select token_hash from public.event_invites where event_id = $1`,
+      [created.event.id],
+    );
+    expect(stored?.token_hash).toHaveLength(64);
+    expect(stored?.token_hash).not.toContain(token);
+
+    cookieJar.clear();
+    const redeemed = await redeemInviteRoute(
+      jsonRequest("http://localhost/api/event-auth/redeem-invite", { token }),
+    );
+    applyCookies(redeemed);
+    const redeemedBody = await read(redeemed);
+    expect(redeemed.status).toBe(200);
+    expect((redeemedBody.event as TimerEvent).id).toBe(created.event.id);
+    expect(cookieJar.has(sessionCookieName(created.event.id))).toBe(true);
+    expect((await one<{ count: number }>(
+      db,
+      `select count(*)::int as count from public.event_invites where event_id = $1`,
+      [created.event.id],
+    ))?.count).toBe(0);
+
+    cookieJar.clear();
+    const replay = await redeemInviteRoute(
+      jsonRequest("http://localhost/api/event-auth/redeem-invite", { token }),
+    );
+    expect(replay.status).toBe(401);
+    expect((await read(replay)).error).toBe("invalid_invite");
+  });
+
+  it("requires the event session to create or revoke an invitation", async () => {
+    const created = await createEvent("Revocable Event");
+    const ownerCookies = new Map(cookieJar);
+    const invitation = await inviteRoute.POST(
+      new Request(`http://localhost/api/events/${created.event.id}/invites`, { method: "POST" }),
+      context(created.event.id),
+    );
+    const invitationBody = await read(invitation);
+
+    cookieJar.clear();
+    const unauthorizedCreate = await inviteRoute.POST(
+      new Request(`http://localhost/api/events/${created.event.id}/invites`, { method: "POST" }),
+      context(created.event.id),
+    );
+    const unauthorizedRevoke = await inviteRoute.DELETE(
+      jsonRequest(`http://localhost/api/events/${created.event.id}/invites`, {
+        inviteId: invitationBody.inviteId,
+      }, "DELETE"),
+      context(created.event.id),
+    );
+    expect([unauthorizedCreate.status, unauthorizedRevoke.status]).toEqual([401, 401]);
+
+    for (const [name, value] of ownerCookies) cookieJar.set(name, value);
+    const revoked = await inviteRoute.DELETE(
+      jsonRequest(`http://localhost/api/events/${created.event.id}/invites`, {
+        inviteId: invitationBody.inviteId,
+      }, "DELETE"),
+      context(created.event.id),
+    );
+    expect(revoked.status).toBe(200);
+
+    cookieJar.clear();
+    const token = String(invitationBody.inviteUrl).split("#")[1];
+    const redemption = await redeemInviteRoute(
+      jsonRequest("http://localhost/api/event-auth/redeem-invite", { token }),
+    );
+    expect(redemption.status).toBe(401);
   });
 });
 

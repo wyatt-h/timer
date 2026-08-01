@@ -20,8 +20,8 @@ import { supabaseAdmin } from "@/lib/server/supabase-admin";
  * deadline — the row is the authority, and it slides forward on every use, so an
  * event in regular use never expires while an untouched one lapses on schedule.
  *
- * The four things that do end a session are explicit: signing out, recovering the
- * password, changing the password, and the deadline passing.
+ * The three things that end a session are explicit: signing out, changing the
+ * password, and the deadline passing.
  *
  * Cookies are named after the event, which is what lets one browser hold
  * authorization for several events at once and lets signing out of one leave the
@@ -98,6 +98,14 @@ export type PreparedSession = {
 
 export function prepareEventSession(eventId: string): PreparedSession {
   const token = makeSessionToken();
+  return prepareEventSessionWithToken(eventId, token);
+}
+
+/** Builds the cookie after a transaction discovers which event a token opened. */
+export function prepareEventSessionWithToken(
+  eventId: string,
+  token: string,
+): PreparedSession {
   return {
     tokenHash: hashSessionToken(token),
     cookie: {
@@ -200,6 +208,6 @@ export async function revokeCurrentSession(eventId: string): Promise<void> {
  * There is deliberately no `revokeAllSessions` here. Retiring every session is
  * part of changing a password, and doing it as a separate statement could leave an
  * event with a new password and stale sessions, or with no way in at all. It
- * happens inside `change_controller_password` and `recover_controller_password`,
- * in the same commit as the new hash and the replacement session.
+ * happens inside `change_controller_password`, in the same commit as the new
+ * hash and the replacement session.
  */

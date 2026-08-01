@@ -35,6 +35,7 @@ afterAll(async () => {
 
 const CONTROLLER_MIGRATION = "20260731010000_event_controller_auth.sql";
 const ACCESS_MIGRATION = "20260801000000_simplify_event_access.sql";
+const INVITE_MIGRATION = "20260801010000_event_invites.sql";
 const VALIDATOR = fileURLToPath(
   new URL("../../supabase/validate_event_controller_database.sql", import.meta.url),
 );
@@ -45,7 +46,7 @@ describe("the complete migration history", () => {
     // first failure, so reaching this point is the assertion. Named explicitly
     // because it is the check that guards against an unrunnable migration.
     const files = migrationFiles();
-    expect(files.at(-1)).toBe(ACCESS_MIGRATION);
+    expect(files.at(-1)).toBe(INVITE_MIGRATION);
     expect(files).toEqual([...files].sort());
 
     const tables = await rows<{ table_name: string }>(
@@ -58,6 +59,7 @@ describe("the complete migration history", () => {
       "agenda_items",
       "event_access",
       "event_auth_attempts",
+      "event_invites",
       "event_runtime",
       "event_sessions",
       "events",
@@ -81,7 +83,7 @@ describe("the complete migration history", () => {
       create schema if not exists supabase_migrations;
       create table if not exists supabase_migrations.schema_migrations (version text primary key);
       insert into supabase_migrations.schema_migrations (version)
-      values ('20260801000000') on conflict do nothing;
+      values ('20260801010000') on conflict do nothing;
     `);
     const report = await rows<{ area: string; status: string; details: string }>(
       db,
@@ -188,6 +190,7 @@ describe("teams are gone from the final schema", () => {
     expect(foreignKeys).toEqual([
       { table_name: "agenda_items", references: "events" },
       { table_name: "event_access", references: "events" },
+      { table_name: "event_invites", references: "events" },
       { table_name: "event_runtime", references: "events" },
       { table_name: "event_sessions", references: "events" },
       { table_name: "speakers", references: "agenda_items" },
@@ -243,7 +246,7 @@ describe("row level security", () => {
       `select grantee, table_name, privilege_type
        from information_schema.role_table_grants
        where table_schema = 'public'
-         and table_name in ('event_access', 'event_sessions', 'event_auth_attempts')
+         and table_name in ('event_access', 'event_sessions', 'event_auth_attempts', 'event_invites')
          and grantee in ('anon', 'authenticated', 'PUBLIC')`,
     );
     // Supabase's default privileges granted these; the migration revoked them.
@@ -256,11 +259,11 @@ describe("row level security", () => {
       `select table_name, privilege_type
        from information_schema.role_table_grants
        where table_schema = 'public'
-         and table_name in ('event_access', 'event_sessions', 'event_auth_attempts')
+         and table_name in ('event_access', 'event_sessions', 'event_auth_attempts', 'event_invites')
          and grantee = 'service_role'
        order by table_name, privilege_type`,
     );
-    for (const table of ["event_access", "event_auth_attempts", "event_sessions"]) {
+    for (const table of ["event_access", "event_auth_attempts", "event_invites", "event_sessions"]) {
       const privileges = grants
         .filter((row) => row.table_name === table)
         .map((row) => row.privilege_type);
@@ -301,6 +304,9 @@ describe("row level security", () => {
       "public.touch_event_session(text, integer)",
       "public.register_event_auth_attempt(text, text, text, integer, integer)",
       "public.clear_event_auth_attempts(text, text, text)",
+      "public.create_event_invite(uuid, text, integer)",
+      "public.redeem_event_invite(text, text, integer)",
+      "public.revoke_event_invite(uuid, uuid)",
     ];
 
     for (const signature of signatures) {
@@ -335,7 +341,7 @@ describe("row level security", () => {
 describe("existing-row safety", () => {
   it("refuses to run when legacy team-owned events exist, and destroys nothing", async () => {
     const legacy = await createBareDatabase();
-    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION].includes(name))) {
+    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION, INVITE_MIGRATION].includes(name))) {
       await legacy.exec(readMigration(file));
     }
 
@@ -381,7 +387,7 @@ describe("existing-row safety", () => {
 
   it("runs once the operator has explicitly cleared the legacy rows", async () => {
     const legacy = await createBareDatabase();
-    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION].includes(name))) {
+    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION, INVITE_MIGRATION].includes(name))) {
       await legacy.exec(readMigration(file));
     }
     await legacy.exec(`
@@ -741,6 +747,10 @@ describe("credential mutations are transactional", () => {
 
   it("changes a password, retires every old session and issues one replacement", async () => {
     const eventId = await seed("cred-change");
+    await db.query(`select public.create_event_invite($1, $2, 86400)`, [
+      eventId,
+      "7".repeat(64),
+    ]);
     // A second device signs in as well.
     await db.query(`select public.issue_event_session($1, $2, 1, 3600)`, [
       eventId,
@@ -778,6 +788,11 @@ describe("credential mutations are transactional", () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0].token_hash).toBe("d".repeat(64));
     expect(sessions[0].password_version).toBe(2);
+    expect((await one<{ count: number }>(
+      db,
+      `select count(*)::int as count from public.event_invites where event_id = $1`,
+      [eventId],
+    ))?.count).toBe(0);
   });
 
   it("refuses a password change against a stale version and changes nothing", async () => {
@@ -956,6 +971,142 @@ describe("sessions", () => {
     expect(new Date(after!.expires_at).getTime()).toBeGreaterThan(
       new Date(before!.expires_at).getTime(),
     );
+  });
+});
+
+describe("one-time event invitations", () => {
+  async function seed(eventName: string) {
+    const [id, viewerToken, agendaId, speakerId] = await Promise.all([
+      newUuid(db),
+      newUuid(db),
+      newUuid(db),
+      newUuid(db),
+    ]);
+    await db.query(`select public.create_controller_event($1::jsonb, $2, $3, 3600)`, [
+      JSON.stringify({
+        id,
+        name: eventName,
+        date: "2026-08-01",
+        status: "draft",
+        viewerToken,
+        agenda: [{
+          id: agendaId,
+          kind: "single",
+          durationSeconds: 600,
+          speakers: [{ id: speakerId, name: "S", durationSeconds: 600 }],
+        }],
+        runtime: { status: "ready", segmentIndex: 0, remainingSeconds: 600 },
+      }),
+      "scrypt$p",
+      (await newUuid(db)).replace(/-/g, "").padEnd(64, "0"),
+    ]);
+    return id;
+  }
+
+  it("keeps one outstanding invitation per event", async () => {
+    const eventId = await seed("Invite replace");
+    const first = await one<{ result: Record<string, unknown> }>(
+      db,
+      `select public.create_event_invite($1, $2, 86400) as result`,
+      [eventId, "a".repeat(64)],
+    );
+    const second = await one<{ result: Record<string, unknown> }>(
+      db,
+      `select public.create_event_invite($1, $2, 86400) as result`,
+      [eventId, "b".repeat(64)],
+    );
+    expect(first?.result.status).toBe("created");
+    expect(second?.result.status).toBe("created");
+    expect(second?.result.inviteId).not.toBe(first?.result.inviteId);
+    expect(await rows<{ token_hash: string }>(
+      db,
+      `select token_hash from public.event_invites where event_id = $1`,
+      [eventId],
+    )).toEqual([{ token_hash: "b".repeat(64) }]);
+  });
+
+  it("consumes a link while issuing the recipient session in one transaction", async () => {
+    const eventId = await seed("Invite redeem");
+    await db.query(`select public.create_event_invite($1, $2, 86400)`, [
+      eventId,
+      "c".repeat(64),
+    ]);
+    const recipientToken = (await newUuid(db)).replace(/-/g, "").padEnd(64, "d");
+    const redeemed = await one<{ result: Record<string, unknown> }>(
+      db,
+      `select public.redeem_event_invite($1, $2, 2592000) as result`,
+      ["c".repeat(64), recipientToken],
+    );
+    expect(redeemed?.result.status).toBe("redeemed");
+    expect(redeemed?.result.eventId).toBe(eventId);
+    expect((redeemed?.result.payload as Record<string, unknown>).event).toBeTruthy();
+    expect((await one<{ count: number }>(
+      db,
+      `select count(*)::int as count from public.event_invites where event_id = $1`,
+      [eventId],
+    ))?.count).toBe(0);
+    expect((await one<{ count: number }>(
+      db,
+      `select count(*)::int as count from public.event_sessions where token_hash = $1`,
+      [recipientToken],
+    ))?.count).toBe(1);
+
+    const replay = await one<{ result: Record<string, unknown> }>(
+      db,
+      `select public.redeem_event_invite($1, $2, 2592000) as result`,
+      ["c".repeat(64), "e".repeat(64)],
+    );
+    expect(replay?.result.status).toBe("invalid");
+  });
+
+  it("allows only one winner when two devices redeem together", async () => {
+    const eventId = await seed("Invite race");
+    await db.query(`select public.create_event_invite($1, $2, 86400)`, [
+      eventId,
+      "f".repeat(64),
+    ]);
+    const firstToken = (await newUuid(db)).replace(/-/g, "").padEnd(64, "1");
+    const secondToken = (await newUuid(db)).replace(/-/g, "").padEnd(64, "2");
+    const attempts = await Promise.all([
+      one<{ result: Record<string, unknown> }>(
+        db,
+        `select public.redeem_event_invite($1, $2, 2592000) as result`,
+        ["f".repeat(64), firstToken],
+      ),
+      one<{ result: Record<string, unknown> }>(
+        db,
+        `select public.redeem_event_invite($1, $2, 2592000) as result`,
+        ["f".repeat(64), secondToken],
+      ),
+    ]);
+    expect(attempts.map((attempt) => attempt?.result.status).sort()).toEqual([
+      "invalid",
+      "redeemed",
+    ]);
+  });
+
+  it("revokes only the named invitation for the authorized event", async () => {
+    const eventId = await seed("Invite revoke");
+    const otherEventId = await seed("Invite revoke other");
+    const created = await one<{ result: Record<string, unknown> }>(
+      db,
+      `select public.create_event_invite($1, $2, 86400) as result`,
+      [eventId, "3".repeat(64)],
+    );
+    const inviteId = created?.result.inviteId;
+    const wrongEvent = await one<{ result: Record<string, unknown> }>(
+      db,
+      `select public.revoke_event_invite($1, $2) as result`,
+      [otherEventId, inviteId],
+    );
+    expect(wrongEvent?.result.status).toBe("not_found");
+
+    const revoked = await one<{ result: Record<string, unknown> }>(
+      db,
+      `select public.revoke_event_invite($1, $2) as result`,
+      [eventId, inviteId],
+    );
+    expect(revoked?.result.status).toBe("revoked");
   });
 });
 

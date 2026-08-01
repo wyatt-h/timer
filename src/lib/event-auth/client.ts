@@ -122,3 +122,27 @@ export function saveControllerEvent(eventId: string, version: number, event: Tim
 export function deleteControllerEvent(eventId: string) {
   return request<{ ok: true }>(`/api/events/${eventId}`, { method: "DELETE" });
 }
+
+export type EventInvite = {
+  inviteId: string;
+  inviteUrl: string;
+  expiresAt: string;
+};
+
+export function createEventInvite(eventId: string) {
+  return request<EventInvite>(`/api/events/${eventId}/invites`, { method: "POST" });
+}
+
+export function revokeEventInvite(eventId: string, inviteId: string) {
+  return request<{ ok: true }>(`/api/events/${eventId}/invites`, {
+    method: "DELETE",
+    body: JSON.stringify({ inviteId }),
+  });
+}
+
+export function redeemEventInvite(token: string) {
+  return request<ControllerEvent>("/api/event-auth/redeem-invite", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}

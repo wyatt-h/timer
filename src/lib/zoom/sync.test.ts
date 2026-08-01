@@ -4,6 +4,7 @@ import {
   planZoomCommand,
   sourceTimerFromEvent,
   toZoomTimerUnits,
+  zoomIndicatorTone,
   type PublishedTimer,
   type SourceTimer,
 } from "@/lib/zoom/sync";
@@ -17,6 +18,7 @@ function source(overrides: Partial<SourceTimer> = {}): SourceTimer {
     label: "Maya Chen",
     phase: "running",
     remainingSeconds: 300,
+    tone: "normal",
     revision: 10,
     ...overrides,
   };
@@ -28,6 +30,7 @@ function published(overrides: Partial<PublishedTimer> = {}): PublishedTimer {
     label: "Maya Chen",
     phase: "running",
     remainingSeconds: 300,
+    tone: "normal",
     at: NOW,
     revision: 10,
     ...overrides,
@@ -41,6 +44,7 @@ function plan(
     enabled?: boolean;
     now?: number;
     canExtend?: boolean;
+    canStyle?: boolean;
   } = {},
 ) {
   return planZoomCommand({
@@ -49,6 +53,7 @@ function plan(
     enabled: overrides.enabled ?? true,
     now: overrides.now ?? NOW,
     canExtend: overrides.canExtend,
+    canStyle: overrides.canStyle,
   });
 }
 
@@ -101,6 +106,7 @@ describe("remaining seconds from authoritative state", () => {
       label: "Maya Chen",
       phase: "running",
       remainingSeconds: 480,
+      tone: "normal",
       revision: 10,
     });
   });
@@ -118,6 +124,20 @@ describe("remaining seconds from authoritative state", () => {
     const result = sourceTimerFromEvent(timerEvent({ endsAt: NOW - 12_000 }), NOW);
 
     expect(result?.remainingSeconds).toBe(-12);
+    expect(result?.tone).toBe("critical");
+  });
+
+  it("uses a duration-aware warning threshold for the contour", () => {
+    const result = sourceTimerFromEvent(timerEvent({ endsAt: NOW + 60_000 }), NOW);
+
+    expect(result?.tone).toBe("caution");
+  });
+
+  it("matches Zoom's native green, yellow, and red short-timer progression", () => {
+    expect(zoomIndicatorTone(7, 10)).toBe("normal");
+    expect(zoomIndicatorTone(4, 10)).toBe("caution");
+    expect(zoomIndicatorTone(1, 10)).toBe("critical");
+    expect(zoomIndicatorTone(-16, 10)).toBe("critical");
   });
 
   it("tracks the current panelist rather than the panel total", () => {
@@ -136,7 +156,7 @@ describe("remaining seconds from authoritative state", () => {
   });
 
   it("clamps only at the Zoom boundary", () => {
-    expect(toZoomTimerUnits(299.2)).toBe(300);
+    expect(toZoomTimerUnits(299.2)).toBe(299_200);
     expect(toZoomTimerUnits(-12)).toBe(0);
   });
 });
@@ -149,6 +169,7 @@ describe("publishing a countdown", () => {
       kind: "start",
       remainingSeconds: 300,
       label: "Maya Chen",
+      tone: "normal",
     });
     expect(result.published).toMatchObject({ phase: "running", remainingSeconds: 300 });
   });
@@ -217,6 +238,7 @@ describe("transitions", () => {
       kind: "start",
       remainingSeconds: 255,
       label: "Maya Chen",
+      tone: "normal",
     });
   });
 
@@ -271,6 +293,7 @@ describe("transitions", () => {
       kind: "start",
       remainingSeconds: 300,
       label: "Noah Williams",
+      tone: "normal",
     });
   });
 
@@ -349,6 +372,32 @@ describe("duplicate and stale delivery", () => {
       kind: "start",
       remainingSeconds: 137,
       label: "Maya Chen",
+      tone: "normal",
+    });
+  });
+
+  it("changes the contour when the audience warning tone changes", () => {
+    const result = plan({
+      source: source({ remainingSeconds: 60, tone: "caution" }),
+      published: published({ remainingSeconds: 60, tone: "normal" }),
+    });
+
+    expect(result.command).toEqual({ kind: "style", tone: "caution" });
+    expect(result.published).toMatchObject({ tone: "caution" });
+  });
+
+  it("republishes with the new contour when style updates are unavailable", () => {
+    const result = plan({
+      source: source({ remainingSeconds: 60, tone: "caution" }),
+      published: published({ remainingSeconds: 60, tone: "normal" }),
+      canStyle: false,
+    });
+
+    expect(result.command).toEqual({
+      kind: "start",
+      remainingSeconds: 60,
+      label: "Maya Chen",
+      tone: "caution",
     });
   });
 });

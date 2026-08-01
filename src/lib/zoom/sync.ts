@@ -33,6 +33,23 @@ const MINIMUM_PUBLISHABLE_SECONDS = 1;
 const MAX_LABEL_LENGTH = 30;
 
 export type TimerPhase = "idle" | "running" | "paused" | "finished";
+export type ZoomIndicatorTone = "normal" | "caution" | "critical";
+
+/**
+ * Zoom's native timer moves from green to yellow to red before zero. Preserve
+ * that behavior while scaling the warning windows to each speaker's duration:
+ * yellow for roughly the final 15%, red for the final 5%, with practical caps.
+ */
+export function zoomIndicatorTone(
+  remainingSeconds: number,
+  durationSeconds: number,
+): ZoomIndicatorTone {
+  const cautionAt = Math.min(300, Math.max(5, durationSeconds * 0.15));
+  const criticalAt = Math.min(60, Math.max(2, durationSeconds * 0.05));
+  if (remainingSeconds <= criticalAt) return "critical";
+  if (remainingSeconds <= cautionAt) return "caution";
+  return "normal";
+}
 
 /**
  * The authoritative timer, flattened to the one clock Zoom can show. Remaining
@@ -46,6 +63,8 @@ export type SourceTimer = {
   label: string;
   phase: TimerPhase;
   remainingSeconds: number;
+  /** Native-style green/yellow/red urgency for the compact contour. */
+  tone: ZoomIndicatorTone;
   /** `RuntimeState.updatedAt`; advances on every control-room write. */
   revision: number;
 };
@@ -56,16 +75,18 @@ export type PublishedTimer = {
   label: string;
   phase: "running" | "paused";
   remainingSeconds: number;
+  tone: ZoomIndicatorTone;
   /** Local clock reading when the command was acknowledged. */
   at: number;
   revision: number;
 };
 
 export type ZoomTimerCommand =
-  | { kind: "start"; remainingSeconds: number; label: string }
+  | { kind: "start"; remainingSeconds: number; label: string; tone: ZoomIndicatorTone }
   | { kind: "pause" }
   | { kind: "resume" }
   | { kind: "extend"; seconds: number }
+  | { kind: "style"; tone: ZoomIndicatorTone }
   | { kind: "remove" }
   | { kind: "noop" };
 
@@ -76,13 +97,11 @@ export type ZoomTimerPlan = {
 };
 
 /**
- * Zoom documents `timer.start` and `extendDuration` as plain numbers without
- * stating a unit. Seconds are the practical expectation and are treated as such
- * here; this is the single place where the assumption is applied, so a live test
- * that proves otherwise is a one-function change.
+ * Dynamic Indicator timer values are milliseconds. Keeping that conversion at
+ * the SDK boundary lets the rest of the application continue to use seconds.
  */
 export function toZoomTimerUnits(seconds: number) {
-  return Math.max(0, Math.ceil(seconds));
+  return Math.max(0, Math.ceil(seconds * 1000));
 }
 
 function shortLabel(label: string) {
@@ -129,6 +148,7 @@ export function sourceTimerFromEvent(event: TimerEvent, now: number): SourceTime
     label: shortLabel(segment.speaker),
     phase,
     remainingSeconds,
+    tone: zoomIndicatorTone(remainingSeconds, segment.durationSeconds),
     revision: runtime.updatedAt,
   };
 }
@@ -148,12 +168,14 @@ function startCommand(source: SourceTimer, now: number): ZoomTimerPlan {
       kind: "start",
       remainingSeconds: source.remainingSeconds,
       label: source.label,
+      tone: source.tone,
     },
     published: {
       segmentId: source.segmentId,
       label: source.label,
       phase: "running",
       remainingSeconds: source.remainingSeconds,
+      tone: source.tone,
       at: now,
       revision: source.revision,
     },
@@ -178,6 +200,7 @@ export function planZoomCommand({
   enabled,
   now,
   canExtend = true,
+  canStyle = true,
 }: {
   source: SourceTimer | null;
   published: PublishedTimer | null;
@@ -185,6 +208,8 @@ export function planZoomCommand({
   now: number;
   /** Clients without `extendDynamicIndicator` republish the whole timer. */
   canExtend?: boolean;
+  /** Clients without `setDynamicIndicatorStyle` keep the initial contour. */
+  canStyle?: boolean;
 }): ZoomTimerPlan {
   // Publishing is opt-in, so losing the source or switching sync off retracts
   // whatever the meeting is currently being shown.
@@ -201,6 +226,12 @@ export function planZoomCommand({
     }
     if (published.segmentId !== source.segmentId) return removal(published);
     if (published.phase === "paused") {
+      if (published.tone !== source.tone && canStyle) {
+        return {
+          command: { kind: "style", tone: source.tone },
+          published: { ...published, tone: source.tone },
+        };
+      }
       /*
        * Zoom is already paused. An adjustment made while paused cannot be
        * corrected here, because the only way to change the value is a fresh
@@ -238,6 +269,14 @@ export function planZoomCommand({
         at: now,
         revision: source.revision,
       },
+    };
+  }
+
+  if (published.tone !== source.tone) {
+    if (!canStyle) return startCommand(source, now);
+    return {
+      command: { kind: "style", tone: source.tone },
+      published: { ...published, tone: source.tone },
     };
   }
 

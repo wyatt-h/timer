@@ -1,10 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, KeyRound, LogOut, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertCircle, Check, Copy, KeyRound, Link2, LogOut, ShieldCheck, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { changeControllerPassword } from "@/lib/event-auth/client";
+import {
+  changeControllerPassword,
+  createEventInvite,
+  revokeEventInvite,
+  type EventInvite,
+} from "@/lib/event-auth/client";
 import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/event-auth/password-rules";
 
 /*
@@ -21,14 +26,16 @@ import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/event-auth/password-
  * the same database transaction.
  */
 
-type Panel = "none" | "password";
+type Panel = "none" | "password" | "invite";
 
 export function ControllerAccessCard({
   eventId,
+  eventName,
   onSignOut,
   onDelete,
 }: {
   eventId: string;
+  eventName: string;
   onSignOut: () => void;
   onDelete: () => void;
 }) {
@@ -38,12 +45,15 @@ export function ControllerAccessCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [invite, setInvite] = useState<EventInvite | null>(null);
+  const [copied, setCopied] = useState(false);
 
   function reset() {
     setPanel("none");
     setCurrentPassword("");
     setNewPassword("");
     setError("");
+    setCopied(false);
   }
 
   async function submitPassword() {
@@ -65,6 +75,52 @@ export function ControllerAccessCard({
     window.setTimeout(() => setNotice(""), 6000);
   }
 
+  async function makeInvite() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    const result = await createEventInvite(eventId);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    setInvite(result.data);
+    setPanel("invite");
+  }
+
+  async function copyInvite() {
+    if (!invite) return;
+    try {
+      await navigator.clipboard.writeText(
+        `You're invited to control "${eventName}" in Timer.\n\n` +
+          `Open this one-time link within 24 hours:\n${invite.inviteUrl}\n\n` +
+          "The link can be used once.",
+      );
+    } catch {
+      setError("The invitation is ready, but this browser could not copy it.");
+      return;
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2400);
+  }
+
+  async function revokeInvite() {
+    if (!invite) return;
+    setBusy(true);
+    setError("");
+    const result = await revokeEventInvite(eventId, invite.inviteId);
+    setBusy(false);
+    if (!result.ok && result.code !== "not_found") {
+      setError(result.message);
+      return;
+    }
+    setInvite(null);
+    setPanel("none");
+    setNotice("Invitation revoked. The link can no longer be used.");
+    window.setTimeout(() => setNotice(""), 6000);
+  }
+
   return (
     <div className="grid gap-2 rounded-field border border-line bg-surface-raised px-3.5 py-3">
       <span className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
@@ -82,7 +138,28 @@ export function ControllerAccessCard({
         )}
       </div>
 
-      {panel === "password" ? (
+      {panel === "invite" && invite ? (
+        <div className="grid gap-3">
+          <p className="text-[12px] leading-relaxed text-text-muted">
+            This link expires in 24 hours and works once. Creating another invitation also
+            revokes this one.
+          </p>
+          <output className="block overflow-hidden text-ellipsis whitespace-nowrap rounded-control border border-line bg-white px-3 py-2 font-mono text-[11px] text-text-muted">
+            {invite.inviteUrl}
+          </output>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="primary" size="sm" disabled={busy} onClick={() => void copyInvite()}>
+              {copied ? <Check size={13} aria-hidden /> : <Copy size={13} aria-hidden />}
+              {copied ? "Copied" : "Copy invitation"}
+            </Button>
+            <Button variant="secondary" size="sm" disabled={busy} onClick={() => void revokeInvite()}>
+              <X size={13} aria-hidden />
+              {busy ? "Revoking…" : "Revoke"}
+            </Button>
+          </div>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={reset}>Close</Button>
+        </div>
+      ) : panel === "password" ? (
         <div className="grid gap-2.5">
           <Input
             id="current-event-password"
@@ -119,6 +196,10 @@ export function ControllerAccessCard({
         </div>
       ) : (
         <div className="grid gap-1.5">
+          <Button variant="secondary" size="sm" disabled={busy} onClick={() => void makeInvite()}>
+            <Link2 size={13} aria-hidden />
+            {busy ? "Creating invitation…" : "Create invitation link"}
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => setPanel("password")}>
             <KeyRound size={13} aria-hidden />
             Change the password

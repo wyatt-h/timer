@@ -107,6 +107,7 @@ export function useZoomIndicator({
         enabled,
         now,
         canExtend: environment.canExtend,
+        canStyle: environment.canStyle,
       });
       if (plan.command.kind === "noop") return;
 
@@ -130,7 +131,7 @@ export function useZoomIndicator({
     tick();
     const interval = window.setInterval(tick, TICK_MS);
     return () => window.clearInterval(interval);
-  }, [enabled, environment.canExtend, environment.canPublish]);
+  }, [enabled, environment.canExtend, environment.canPublish, environment.canStyle]);
 
   return { source, published, lastOutcome, lastEvent, reconcile };
 }

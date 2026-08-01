@@ -12,6 +12,7 @@
 export type EventAuthErrorCode =
   | "invalid_request"
   | "invalid_credentials"
+  | "invalid_invite"
   | "session_required"
   | "wrong_event"
   | "not_found"
@@ -24,6 +25,7 @@ export type EventAuthErrorCode =
 const STATUS: Record<EventAuthErrorCode, number> = {
   invalid_request: 400,
   invalid_credentials: 401,
+  invalid_invite: 401,
   session_required: 401,
   wrong_event: 403,
   not_found: 404,
@@ -38,6 +40,7 @@ const MESSAGE: Record<EventAuthErrorCode, string> = {
   invalid_request: "That request could not be understood.",
   // Deliberately identical for an unknown login name and a wrong password.
   invalid_credentials: "That event name and password do not match.",
+  invalid_invite: "That invitation link has expired or has already been used.",
   session_required: "Sign in to this event again.",
   wrong_event: "This session is not for that event.",
   not_found: "That event could not be found.",

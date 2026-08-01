@@ -2,7 +2,7 @@
  * Timer database validator
  *
  * Run this entire file in Supabase Dashboard -> SQL Editor after applying
- * 20260801000000_simplify_event_access.sql.
+ * 20260801010000_event_invites.sql.
  *
  * READ-ONLY: this script creates, changes, and deletes nothing. It returns one
  * result table. The SUMMARY row must be PASS and every other row should be PASS.
@@ -15,6 +15,7 @@ expected_tables(table_name) as (
     ('agenda_items'),
     ('event_access'),
     ('event_auth_attempts'),
+    ('event_invites'),
     ('event_runtime'),
     ('event_sessions'),
     ('events'),
@@ -93,6 +94,12 @@ expected_columns(table_name, column_name, data_type, udt_name, is_nullable) as (
     ('event_sessions', 'created_at', 'timestamp with time zone', 'timestamptz', 'NO'),
     ('event_sessions', 'last_used_at', 'timestamp with time zone', 'timestamptz', 'NO'),
     ('event_sessions', 'expires_at', 'timestamp with time zone', 'timestamptz', 'NO'),
+
+    ('event_invites', 'id', 'uuid', 'uuid', 'NO'),
+    ('event_invites', 'event_id', 'uuid', 'uuid', 'NO'),
+    ('event_invites', 'token_hash', 'text', 'text', 'NO'),
+    ('event_invites', 'created_at', 'timestamp with time zone', 'timestamptz', 'NO'),
+    ('event_invites', 'expires_at', 'timestamp with time zone', 'timestamptz', 'NO'),
 
     ('event_auth_attempts', 'id', 'uuid', 'uuid', 'NO'),
     ('event_auth_attempts', 'scope', 'text', 'text', 'NO'),
@@ -177,7 +184,10 @@ expected_functions(signature) as (
     ('public.change_controller_password(uuid,integer,text,text,integer)'),
     ('public.touch_event_session(text,integer)'),
     ('public.register_event_auth_attempt(text,text,text,integer,integer)'),
-    ('public.clear_event_auth_attempts(text,text,text)')
+    ('public.clear_event_auth_attempts(text,text,text)'),
+    ('public.create_event_invite(uuid,text,integer)'),
+    ('public.redeem_event_invite(text,text,integer)'),
+    ('public.revoke_event_invite(uuid,uuid)')
 ),
 security_definer_functions(signature) as (
   values
@@ -193,7 +203,10 @@ security_definer_functions(signature) as (
     ('public.change_controller_password(uuid,integer,text,text,integer)'),
     ('public.touch_event_session(text,integer)'),
     ('public.register_event_auth_attempt(text,text,text,integer,integer)'),
-    ('public.clear_event_auth_attempts(text,text,text)')
+    ('public.clear_event_auth_attempts(text,text,text)'),
+    ('public.create_event_invite(uuid,text,integer)'),
+    ('public.redeem_event_invite(text,text,integer)'),
+    ('public.revoke_event_invite(uuid,uuid)')
 ),
 service_functions(signature) as (
   values
@@ -204,7 +217,10 @@ service_functions(signature) as (
     ('public.change_controller_password(uuid,integer,text,text,integer)'),
     ('public.touch_event_session(text,integer)'),
     ('public.register_event_auth_attempt(text,text,text,integer,integer)'),
-    ('public.clear_event_auth_attempts(text,text,text)')
+    ('public.clear_event_auth_attempts(text,text,text)'),
+    ('public.create_event_invite(uuid,text,integer)'),
+    ('public.redeem_event_invite(text,text,integer)'),
+    ('public.revoke_event_invite(uuid,uuid)')
 ),
 private_functions(signature) as (
   values
@@ -222,6 +238,8 @@ expected_indexes(index_name) as (
     ('speakers_agenda_item_id_idx'),
     ('event_sessions_event_id_idx'),
     ('event_sessions_expires_at_idx'),
+    ('event_invites_event_id_idx'),
+    ('event_invites_expires_at_idx'),
     ('event_auth_attempts_identifier_idx'),
     ('event_auth_attempts_address_idx'),
     ('event_auth_attempts_created_at_idx')
@@ -233,10 +251,10 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     exists (
       select 1
       from supabase_migrations.schema_migrations
-      where version = '20260801000000'
+      where version = '20260801010000'
     ),
     'FAIL',
-    'Expected version 20260801000000 in supabase_migrations.schema_migrations'
+    'Expected version 20260801010000 in supabase_migrations.schema_migrations'
 
   union all
   select
@@ -244,7 +262,7 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     not exists (select 1 from table_differences),
     'FAIL',
     coalesce((select string_agg(kind || ': ' || object_name, '; ' order by kind, object_name)
-              from table_differences), 'Found exactly the seven expected tables')
+              from table_differences), 'Found exactly the eight expected tables')
 
   union all
   select
@@ -253,7 +271,7 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     'FAIL',
     coalesce((select string_agg(table_name || '.' || column_name || ': ' || problem,
                                 '; ' order by table_name, column_name)
-              from column_differences), 'All 56 column definitions match')
+              from column_differences), 'All 61 column definitions match')
 
   union all
   select
@@ -297,7 +315,7 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
   union all
   select
     70, 'schema', 'every application table has a primary key',
-    (select count(distinct c.conrelid) = 7
+    (select count(distinct c.conrelid) = 8
      from pg_constraint c
      where c.contype = 'p'
        and c.conrelid in (
@@ -307,15 +325,16 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
          'public.event_runtime'::regclass,
          'public.event_access'::regclass,
          'public.event_sessions'::regclass,
-         'public.event_auth_attempts'::regclass
+         'public.event_auth_attempts'::regclass,
+         'public.event_invites'::regclass
        )),
     'FAIL',
-    'Expected a primary key on all seven tables'
+    'Expected a primary key on all eight tables'
 
   union all
   select
     80, 'schema', 'foreign-key ownership chain is exact and cascading',
-    (select count(*) = 5
+    (select count(*) = 6
      from pg_constraint c
      join pg_class child on child.oid = c.conrelid
      join pg_namespace n on n.oid = child.relnamespace
@@ -324,9 +343,10 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
       and exists (select 1 from pg_constraint where conname = 'speakers_agenda_item_id_fkey' and confdeltype = 'c')
       and exists (select 1 from pg_constraint where conname = 'event_runtime_event_id_fkey' and confdeltype = 'c')
       and exists (select 1 from pg_constraint where conname = 'event_access_event_id_fkey' and confdeltype = 'c')
-      and exists (select 1 from pg_constraint where conname = 'event_sessions_event_id_fkey' and confdeltype = 'c'),
+      and exists (select 1 from pg_constraint where conname = 'event_sessions_event_id_fkey' and confdeltype = 'c')
+      and exists (select 1 from pg_constraint where conname = 'event_invites_event_id_fkey' and confdeltype = 'c'),
     'FAIL',
-    'Expected five ON DELETE CASCADE foreign keys and no others in public'
+    'Expected six ON DELETE CASCADE foreign keys and no others in public'
 
   union all
   select
@@ -334,9 +354,10 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     to_regclass('public.events_viewer_token_key') is not null
       and to_regclass('public.events_zoom_token_key') is not null
       and to_regclass('public.event_access_login_name_key') is not null
-      and to_regclass('public.event_sessions_token_hash_key') is not null,
+      and to_regclass('public.event_sessions_token_hash_key') is not null
+      and to_regclass('public.event_invites_token_hash_key') is not null,
     'FAIL',
-    'viewer_token, zoom_token, login_name, and session token_hash must be unique'
+    'viewer_token, zoom_token, login_name, session tokens, and invite tokens must be unique'
 
   union all
   select
@@ -409,29 +430,32 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     (select count(*) >= 1 from pg_constraint
      where conrelid = 'public.event_sessions'::regclass and contype = 'c'
        and pg_get_constraintdef(oid) like '%token_hash%64%')
+      and (select count(*) >= 1 from pg_constraint
+           where conrelid = 'public.event_invites'::regclass and contype = 'c'
+             and pg_get_constraintdef(oid) like '%token_hash%64%')
       and (select count(*) >= 2 from pg_constraint
            where conrelid = 'public.event_auth_attempts'::regclass and contype = 'c'
              and pg_get_constraintdef(oid) like '%64%')
       and exists (
         select 1 from pg_constraint
         where conrelid = 'public.event_auth_attempts'::regclass and contype = 'c'
-          and pg_get_constraintdef(oid) like '%login%create%'
+          and pg_get_constraintdef(oid) like '%login%create%invite%'
           and pg_get_constraintdef(oid) not like '%recover%'
       ),
     'FAIL',
-    'Session/auth hashes must be 64 characters and rate-limit scope must be restricted'
+    'Session/invite/auth hashes must be 64 characters and rate-limit scope must be restricted'
 
   union all
   select
     200, 'security', 'RLS is enabled on every application table',
-    (select count(*) = 7 and bool_and(c.relrowsecurity)
+    (select count(*) = 8 and bool_and(c.relrowsecurity)
      from pg_class c
      join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public'
        and c.relkind = 'r'
        and c.relname in (select table_name from expected_tables)),
     'FAIL',
-    'All seven application tables must have row-level security enabled'
+    'All eight application tables must have row-level security enabled'
 
   union all
   select
@@ -449,7 +473,7 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
       select 1
       from information_schema.role_table_grants
       where table_schema = 'public'
-        and table_name in ('event_access', 'event_sessions', 'event_auth_attempts')
+        and table_name in ('event_access', 'event_sessions', 'event_auth_attempts', 'event_invites')
         and grantee in ('anon', 'authenticated', 'PUBLIC')
     ),
     'FAIL',
@@ -466,7 +490,9 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
         ('event_sessions', 'SELECT'), ('event_sessions', 'INSERT'),
         ('event_sessions', 'UPDATE'), ('event_sessions', 'DELETE'),
         ('event_auth_attempts', 'SELECT'), ('event_auth_attempts', 'INSERT'),
-        ('event_auth_attempts', 'UPDATE'), ('event_auth_attempts', 'DELETE')
+        ('event_auth_attempts', 'UPDATE'), ('event_auth_attempts', 'DELETE'),
+        ('event_invites', 'SELECT'), ('event_invites', 'INSERT'),
+        ('event_invites', 'UPDATE'), ('event_invites', 'DELETE')
       ) required(table_name, privilege_type)
       where not exists (
         select 1 from information_schema.role_table_grants g
@@ -477,7 +503,7 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
       )
     ),
     'FAIL',
-    'service_role needs SELECT, INSERT, UPDATE, and DELETE on all three sensitive tables'
+    'service_role needs SELECT, INSERT, UPDATE, and DELETE on all four sensitive tables'
 
   union all
   select
@@ -488,7 +514,7 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     'FAIL',
     coalesce((select string_agg(signature, '; ' order by signature)
               from expected_functions e where to_regprocedure(e.signature) is null),
-             'All 17 required function signatures exist')
+             'All 20 required function signatures exist')
 
   union all
   select
@@ -565,13 +591,14 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     true,
     'FAIL',
     format(
-      'events=%s, agenda_items=%s, speakers=%s, runtime=%s, access=%s, sessions=%s, auth_attempts=%s',
+      'events=%s, agenda_items=%s, speakers=%s, runtime=%s, access=%s, sessions=%s, invites=%s, auth_attempts=%s',
       (select count(*) from public.events),
       (select count(*) from public.agenda_items),
       (select count(*) from public.speakers),
       (select count(*) from public.event_runtime),
       (select count(*) from public.event_access),
       (select count(*) from public.event_sessions),
+      (select count(*) from public.event_invites),
       (select count(*) from public.event_auth_attempts)
     )
 
@@ -631,10 +658,29 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
 
   union all
   select
+    445, 'data', 'invitation rows are internally consistent',
+    not exists (
+      select 1 from public.event_invites
+      where token_hash !~ '^[0-9a-f]{64}$'
+         or expires_at <= created_at
+    ),
+    'FAIL',
+    'Invitation hashes and timestamps must be valid'
+
+  union all
+  select
+    447, 'data', 'expired invitations awaiting cleanup',
+    not exists (select 1 from public.event_invites where expires_at <= now()),
+    'WARN',
+    format('%s expired invitation(s); harmless, and create/redeem will prune them',
+           (select count(*) from public.event_invites where expires_at <= now()))
+
+  union all
+  select
     450, 'data', 'rate-limit rows contain hashes only',
     not exists (
       select 1 from public.event_auth_attempts
-      where scope not in ('login', 'create')
+      where scope not in ('login', 'create', 'invite')
          or identifier_hash !~ '^[0-9a-f]{64}$'
          or address_hash !~ '^[0-9a-f]{64}$'
     ),

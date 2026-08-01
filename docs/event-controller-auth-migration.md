@@ -10,6 +10,10 @@ The database stores a canonical event-name key (trimmed, whitespace collapsed,
 and lowercased), so `Global Call` and ` global   CALL ` identify the same event.
 Event names must therefore be globally unique after canonicalization.
 
+A signed-in controller can also create a one-time invitation. The raw token is
+never stored in PostgreSQL; its hash expires after 24 hours and is deleted as it
+creates the recipient's event session.
+
 ## Migration files
 
 Apply every file in `supabase/migrations` in filename order. The two access-model
@@ -19,6 +23,8 @@ migrations are:
    model and creates per-event sessions and versioned writes.
 2. `20260801000000_simplify_event_access.sql` — makes the event name the access
    identifier and removes recovery credentials/functions.
+3. `20260801010000_event_invites.sql` — adds hashed, one-time, 24-hour event
+   invitation links and the transactional redemption functions.
 
 Do not edit a migration that has already been applied. Add a new forward migration
 for future schema changes.
@@ -55,8 +61,8 @@ Preview the pending migration:
 npx supabase@latest db push --linked --dry-run
 ```
 
-The preview should list `20260801000000_simplify_event_access.sql` and no unknown
-files. Then apply it:
+The preview should list the locally pending migration files and no unknown files.
+Then apply them:
 
 ```bash
 npx supabase@latest db push --linked
@@ -81,6 +87,7 @@ The validator is read-only. It verifies:
 
 - exact tables, columns, types, nullability, enums, indexes, and triggers;
 - no legacy team objects and no recovery column/functions;
+- the invitation table, token constraints, indexes, grants, and transactional functions;
 - function signatures and grants;
 - RLS and public/service-role boundaries;
 - constraints for access names, timer bounds, hashes, and rate-limit scopes;
@@ -120,6 +127,10 @@ After deployment:
 8. Delete the event and confirm its remembered entry disappears from that device.
 9. In a Zoom meeting, sync a running timer and confirm the compact Dynamic
    Indicator shows the remaining time, not the speaker name.
+10. Create an invitation link, open it in a private browser, and confirm it opens
+    the event and appears under **On this device**.
+11. Open the same invitation again and confirm it is rejected as already used.
+12. Create another invitation, revoke it, and confirm it cannot be opened.
 
 ## Rollback
 

@@ -1,4 +1,4 @@
-import type { ZoomTimerCommand } from "@/lib/zoom/sync";
+import type { ZoomIndicatorTone, ZoomTimerCommand } from "@/lib/zoom/sync";
 import { toZoomTimerUnits } from "@/lib/zoom/sync";
 
 /*
@@ -34,6 +34,7 @@ export const ZOOM_CAPABILITIES = [
   "getDynamicIndicator",
   "removeDynamicIndicator",
   "extendDynamicIndicator",
+  "setDynamicIndicatorStyle",
   "onSetDynamicIndicator",
   "onRemoveDynamicIndicator",
   "onExtendDynamicIndicator",
@@ -80,6 +81,7 @@ export type ZoomEnvironment = {
   missingCapabilities: Apis[];
   canPublish: boolean;
   canExtend: boolean;
+  canStyle: boolean;
   error: ZoomErrorInfo | null;
 };
 
@@ -107,6 +109,7 @@ const EMPTY_ENVIRONMENT: ZoomEnvironment = {
   missingCapabilities: [],
   canPublish: false,
   canExtend: false,
+  canStyle: false,
   error: null,
 };
 
@@ -189,6 +192,8 @@ function finalize(runningContext: RunningContext | null, missingCapabilities: Ap
     canPublish: availability === "ready",
     canExtend:
       availability === "ready" && !missingCapabilities.includes("extendDynamicIndicator"),
+    canStyle:
+      availability === "ready" && !missingCapabilities.includes("setDynamicIndicatorStyle"),
     missingCapabilities,
   };
 }
@@ -297,6 +302,13 @@ export async function refreshZoomContext(): Promise<ZoomEnvironment> {
 let queue: Promise<unknown> = Promise.resolve();
 let newestRevision = Number.NEGATIVE_INFINITY;
 
+/** High-contrast contours model Zoom's native normal/warning/critical states. */
+export const ZOOM_INDICATOR_BORDER_COLORS: Record<ZoomIndicatorTone, string> = {
+  normal: "#00D96F",
+  caution: "#FFB000",
+  critical: "#F04464",
+};
+
 async function send(instance: ZoomSdk, command: ZoomTimerCommand) {
   switch (command.kind) {
     case "start":
@@ -304,8 +316,8 @@ async function send(instance: ZoomSdk, command: ZoomTimerCommand) {
        * Sent as a complete indicator rather than a partial update: Zoom does not
        * document whether omitted fields are preserved or reset. Sound and
        * notifications stay off — this application chimes on its own displays,
-       * and pushing audio at a whole meeting is not ours to do. Overtime is left
-       * to those displays too, so the countdown stops at zero here.
+       * and pushing audio at a whole meeting is not ours to do. Overtime remains
+       * enabled so Zoom stays aligned with the audience display after zero.
        */
       await instance.setDynamicIndicator({
         timer: {
@@ -313,9 +325,10 @@ async function send(instance: ZoomSdk, command: ZoomTimerCommand) {
           direction: "down",
           start: toZoomTimerUnits(command.remainingSeconds),
           withSound: false,
-          countNegativeAfterAlarm: false,
+          countNegativeAfterAlarm: true,
           showNotification: false,
         },
+        borderColor: ZOOM_INDICATOR_BORDER_COLORS[command.tone],
       });
       return;
     case "pause":
@@ -328,6 +341,11 @@ async function send(instance: ZoomSdk, command: ZoomTimerCommand) {
     case "extend":
       await instance.extendDynamicIndicator({
         extendDuration: toZoomTimerUnits(command.seconds),
+      });
+      return;
+    case "style":
+      await instance.setDynamicIndicatorStyle({
+        borderColor: ZOOM_INDICATOR_BORDER_COLORS[command.tone],
       });
       return;
     case "remove":
