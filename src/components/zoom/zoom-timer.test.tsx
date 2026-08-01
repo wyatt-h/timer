@@ -86,6 +86,24 @@ function fakeSdk(configImplementation?: () => Promise<unknown>) {
   };
 }
 
+/*
+ * Mirrors the real SDK instance, which is a Proxy that throws for any property
+ * it does not recognise — including `then`.
+ */
+function asModule(sdk: ReturnType<typeof fakeSdk>) {
+  const instance = new Proxy(sdk, {
+    get(target, property, receiver) {
+      if (!(property in target)) {
+        throw new Error(
+          `Method ${String(property)} is not available in this version of Zoom Apps SDK`,
+        );
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  return async () => ({ default: instance as never });
+}
+
 beforeEach(() => {
   zoomTestState.connection = "live";
   zoomTestState.hasEvent = true;
@@ -103,10 +121,12 @@ afterEach(() => {
 
 describe("ZoomTimer outside Zoom", () => {
   it("shows a preview instead of crashing when there is no Zoom bridge", async () => {
-    setZoomSdkLoader(async () =>
-      fakeSdk(async () => {
-        throw new Error("The Zoom Apps SDK is not supported by this browser");
-      }) as never,
+    setZoomSdkLoader(
+      asModule(
+        fakeSdk(async () => {
+          throw new Error("The Zoom Apps SDK is not supported by this browser");
+        }),
+      ),
     );
 
     render(<ZoomTimer />);
@@ -116,10 +136,12 @@ describe("ZoomTimer outside Zoom", () => {
   });
 
   it("still previews the authoritative countdown", async () => {
-    setZoomSdkLoader(async () =>
-      fakeSdk(async () => {
-        throw new Error("The Zoom Apps SDK is not supported by this browser");
-      }) as never,
+    setZoomSdkLoader(
+      asModule(
+        fakeSdk(async () => {
+          throw new Error("The Zoom Apps SDK is not supported by this browser");
+        }),
+      ),
     );
 
     render(<ZoomTimer />);
@@ -133,7 +155,7 @@ describe("ZoomTimer outside Zoom", () => {
 describe("ZoomTimer inside a meeting", () => {
   it("publishes nothing until the operator asks for it", async () => {
     const sdk = fakeSdk();
-    setZoomSdkLoader(async () => sdk as never);
+    setZoomSdkLoader(asModule(sdk));
 
     render(<ZoomTimer />);
     await screen.findByRole("button", { name: /Sync to Zoom/ });
@@ -145,7 +167,7 @@ describe("ZoomTimer inside a meeting", () => {
 
   it("publishes the countdown once, and says the meeting can see it", async () => {
     const sdk = fakeSdk();
-    setZoomSdkLoader(async () => sdk as never);
+    setZoomSdkLoader(asModule(sdk));
 
     render(<ZoomTimer />);
     await userEvent.click(await screen.findByRole("button", { name: /Sync to Zoom/ }));
@@ -179,7 +201,7 @@ describe("ZoomTimer inside a meeting", () => {
 
   it("retracts the indicator when the operator stops sharing", async () => {
     const sdk = fakeSdk();
-    setZoomSdkLoader(async () => sdk as never);
+    setZoomSdkLoader(asModule(sdk));
 
     render(<ZoomTimer />);
     await userEvent.click(await screen.findByRole("button", { name: /Sync to Zoom/ }));
@@ -195,7 +217,7 @@ describe("ZoomTimer inside a meeting", () => {
   it("cannot publish when no event is connected", async () => {
     zoomTestState.hasEvent = false;
     window.localStorage.clear();
-    setZoomSdkLoader(async () => fakeSdk() as never);
+    setZoomSdkLoader(asModule(fakeSdk()));
 
     render(<ZoomTimer />);
 

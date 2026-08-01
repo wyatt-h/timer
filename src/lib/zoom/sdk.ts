@@ -132,13 +132,26 @@ export function normalizeZoomError(error: unknown): ZoomErrorInfo {
   return { message, ...(code ? { code } : {}), ...(requestId ? { requestId } : {}) };
 }
 
-type SdkLoader = () => Promise<ZoomSdk>;
+type ZoomSdkModule = { default: ZoomSdk };
+type SdkLoader = () => Promise<ZoomSdkModule>;
 
-const importSdk: SdkLoader = async () => (await import("@zoom/appssdk")).default;
+/*
+ * Resolves with the module, never with the SDK instance itself.
+ *
+ * The instance is a Proxy that throws for any property it does not recognise.
+ * Resolving a promise with it makes the runtime's own thenable check read
+ * `.then`, which the Proxy answers with "Method then is not available in this
+ * version of Zoom Apps SDK" — so the SDK appears to fail before `config()` is
+ * ever reached. Keeping the Proxy inside a plain object avoids the check.
+ */
+const importSdk: SdkLoader = () => import("@zoom/appssdk");
 
 let loadSdk: SdkLoader = importSdk;
 
-/** The seam tests use to supply a fake SDK instead of the real package. */
+/**
+ * The seam tests use to supply a fake SDK instead of the real package. Loaders
+ * must resolve with `{ default: sdk }` for the reason above.
+ */
 export function setZoomSdkLoader(loader: SdkLoader | null) {
   loadSdk = loader ?? importSdk;
 }
@@ -211,7 +224,7 @@ async function configure(): Promise<ZoomEnvironment> {
 
   let instance: ZoomSdk;
   try {
-    instance = await loadSdk();
+    instance = (await loadSdk()).default;
   } catch (error) {
     return { ...EMPTY_ENVIRONMENT, availability: "error", error: normalizeZoomError(error) };
   }

@@ -67,9 +67,27 @@ function fakeSdk(overrides: Partial<Record<string, unknown>> = {}) {
 
 type FakeSdk = ReturnType<typeof fakeSdk>;
 
+/*
+ * The real SDK instance is a Proxy that throws for any property it does not
+ * recognise, including `then`. Wrapping every fake the same way means the whole
+ * suite fails if this module ever resolves a promise with the instance itself.
+ */
+function proxied(sdk: FakeSdk) {
+  return new Proxy(sdk, {
+    get(target, property, receiver) {
+      if (!(property in target)) {
+        throw new Error(
+          `Method ${String(property)} is not available in this version of Zoom Apps SDK`,
+        );
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
 /** The loader seam keeps the real package out of the test environment. */
 function install(sdk: FakeSdk) {
-  setZoomSdkLoader(async () => sdk as never);
+  setZoomSdkLoader(async () => ({ default: proxied(sdk) as never }));
   return sdk;
 }
 
@@ -93,6 +111,26 @@ describe("configuration", () => {
     expect(first).toBe(second);
     expect(first.availability).toBe("ready");
     expect(first.canPublish).toBe(true);
+  });
+
+  it("never resolves a promise with the SDK instance itself", async () => {
+    /*
+     * Guards the failure this module shipped with once: an async loader that
+     * returned the instance made the runtime read `.then` off the Proxy, and the
+     * SDK reported that it had not been configured.
+     */
+    const sdk = fakeSdk();
+    const instance = proxied(sdk);
+    setZoomSdkLoader(async () => ({ default: instance as never }));
+
+    const environment = await initZoomSdk();
+
+    expect(() => (instance as unknown as { then: unknown }).then).toThrow(
+      /Method then is not available/,
+    );
+    expect(environment.availability).toBe("ready");
+    expect(environment.error).toBeNull();
+    expect(sdk.config).toHaveBeenCalledTimes(1);
   });
 
   it("declares every capability it uses and nothing else", async () => {
