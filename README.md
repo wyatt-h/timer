@@ -5,8 +5,7 @@ Timer is a focused event timer for single speakers and multi-speaker panels. An 
 ## What is included
 
 - Independent events: no teams, no accounts, no workspace to belong to
-- Event controller credentials: a unique username and password per event
-- One-time recovery code per event, rotatable from the control room
+- Per-event access: the event name and a password of at least six characters
 - Event builder, reachable straight from the home screen
 - Edit existing events at any time
 - CSV batch import for one or multiple events
@@ -28,15 +27,13 @@ Timer is a focused event timer for single speakers and multi-speaker panels. An 
 ## How access works
 
 There are no user accounts and no teams. **An event is an independent resource
-that carries its own controller username and password**, chosen when it is
-created.
+opened with its event name and password.** The password is chosen when the event
+is created, and the event name is its globally unique sign-in identifier.
 
-- **Create an event** asks for nothing up front. The controller username and
-  password are chosen in the builder, at the point where there is an event for them
-  to own.
-- **Open an event** on any other device needs that event's username and password.
-  Nothing else — the username is globally unique, so it identifies the event on
-  its own, and the response says which event to open.
+- **Create an event** asks for nothing up front. A password of at least six
+  characters is chosen in the builder.
+- **Open an event** on another device needs the event name and password. Names are
+  matched without regard to capitalization or repeated spaces.
 - A controller signed in to one event cannot see, read, or change another. Every
   request proves a session for the exact event it names.
 - Signing in sets an HTTP-only, `SameSite=Lax`, `Secure`-in-production cookie
@@ -45,17 +42,14 @@ created.
   without signing in again. Several events can be open in the same browser at
   once, and signing out of one leaves the others alone.
 - **The browser never stores a password or a session token.** What is kept
-  locally is an offline cache of the event and a list of event ids, display names
-  and usernames this device has opened, both in `localStorage`, plus a per-tab
+  locally is an offline cache of the event and a list of event ids and display names
+  this device has opened, both in `localStorage`, plus a per-tab
   outbox in `sessionStorage` holding any edit the server has not yet confirmed. The
   event list is a convenience, never an authorization: no endpoint returns a
   directory of events, and every entry is re-checked against its own session.
-- A **recovery code** is shown exactly once when an event is created. It is the
-  only way back in if the password is forgotten, and only its hash is stored.
-  **Losing both the password and the recovery code means the event cannot be
-  recovered by anyone** — there is no email address on the event to reset it
-  with. The control room can change the password and issue a new recovery code at
-  any time; either action shows the replacement once.
+- There is **no recovery code or email reset flow**. A device with a live session
+  can change or delete the event. If every session and the password are lost, create
+  a new event.
 - **Audience links stay anonymous and read-only** through an unguessable viewer
   token, and the **Zoom App stays anonymous and read-only** through a pairing
   code. Neither needs controller credentials.
@@ -63,8 +57,8 @@ created.
   rate-limit rows are unreachable by the browser's `anon` key entirely; every
   controller write goes through a server-side route handler that validates the
   session first and then calls a transactional database function.
-- Sessions end on sign-out, on a password change, on a recovery, and when the
-  30 days lapse. A password change or recovery replaces the secret, retires every
+- Sessions end on sign-out, on a password change, and when the 30 days lapse. A
+  password change replaces the secret, retires every
   other session and issues this device's replacement **in one database
   transaction**, so it cannot half-apply.
 - **An expired session is not a deleted event.** A 401 or 403 asks for the password
@@ -72,8 +66,6 @@ created.
   signing back in resumes them against whatever the server now holds, still under
   optimistic concurrency. Local data is cleared only on a confirmed deletion, a
   confirmed 404, or an explicit sign-out.
-- Replacing a recovery code needs the current password too, because a recovery code
-  can replace a password.
 
 ## Run locally
 
@@ -158,13 +150,10 @@ run while any legacy event row exists rather than orphaning it. See
 
 Use **Import from CSV** on the home screen. A file can contain one event or several events grouped by `event_name`. Rows sharing an `item_order` value become a single agenda item, which is how a panel's panelists are grouped — without `item_order`, every row becomes its own item. Agenda items have no titles; they are identified by their speakers. Download `public/event-import-template.csv` for the supported columns and an example containing both a single speaker and a panel.
 
-Every imported event is independent, so each one needs credentials before it can
-exist. No team name is asked for or generated. After the file is parsed the import
-asks once for a controller username and a password: a single event uses the
-username as given, and several events get numbered usernames from it — `summit-1`,
-`summit-2`, and so on, which the field states before you commit to it. Each event
-gets its own event id, credential record, password hash, recovery code and session.
-Every code is shown once, together, with copy-all and download options.
+Every imported event is independent, so each one needs a password before it can
+exist. No team or username is asked for or generated. The import asks once for a
+password and uses each imported event name as that event's sign-in identifier.
+Each event gets its own id, credential record, password hash, and session.
 
 ## Deploy to Vercel
 
@@ -213,9 +202,7 @@ the browser cannot reach a credential, a session or a rate-limit row at all.
 policies. Controller writes go through `create_controller_event`,
 `replace_controller_event` and `delete_controller_event`, which are granted to
 `service_role` alone and each replace an event and its children in one transaction.
-Credential changes go through `change_controller_password`,
-`recover_controller_password` and `rotate_controller_recovery_code` for the same
-reason.
+Password changes go through `change_controller_password` for the same reason.
 
 `event_runtime.remaining_seconds` and `panel_remaining_seconds` accept negative
 values within ±86400, because a countdown does not stop at zero. Overtime persists,
@@ -229,7 +216,11 @@ return no team field, and need no team join.
 
 ## Zoom App
 
-The Zoom App at `/zoom` publishes the current speaker's countdown as a Zoom **Dynamic Indicator**, which every participant sees without installing anything. Only the operator installs the app. The application and its Supabase data remain authoritative; the Zoom page never writes to them.
+The Zoom App at `/zoom` publishes the current countdown as a timer-only Zoom
+**Dynamic Indicator**, so the compact indicator shows the remaining time rather
+than a speaker label. Every participant sees it without installing anything. Only
+the operator installs the app. The application and its Supabase data remain
+authoritative; the Zoom page never writes to them.
 
 ### Connect an event
 
@@ -273,21 +264,19 @@ use generic public error messages, and never return a database message.
 
 | Route | Authorization |
 |---|---|
-| `POST /api/event-auth/create` | none — public, rate-limited. Takes the event and its credentials only; no team field exists. Returns the event and the one-time recovery code, and sets the event session cookie |
-| `POST /api/event-auth/login` | controller username + password, rate-limited. Returns only that event |
+| `POST /api/event-auth/create` | none — public, rate-limited. Takes the event and password, derives access from the event name, and sets the event session cookie |
+| `POST /api/event-auth/login` | event name + password, rate-limited. Returns only that event |
 | `POST /api/event-auth/logout` | the session cookie for the named event; clears it and no other |
-| `POST /api/event-auth/recover` | username + recovery code + new password, rate-limited |
 | `POST /api/event-auth/change-password` | a valid session for the event, plus the current password |
-| `POST /api/event-auth/rotate-recovery` | a valid session for the event, plus the current password, rate-limited |
 | `GET /api/events/:eventId` | a valid session for that exact event |
 | `PUT /api/events/:eventId` | a valid session for that exact event, plus the version last read |
 | `DELETE /api/events/:eventId` | a valid session for that exact event |
 
 No endpoint lists events; every read is addressed by one id and gated by that id's
-session. `login` never accepts an event id as proof of anything. An unknown username and a
+session. `login` never accepts an event id as proof of anything. An unknown event name and a
 wrong password produce the same status and the same message. Statuses are 400 for
 malformed input, 401 for bad credentials or a missing session, 403 for a session
-belonging to a different event, 409 for a version conflict or a taken username,
+belonging to a different event, 409 for a version conflict or a taken event name,
 429 when rate-limited, and 503 when the server has no Supabase configuration.
 
 ## Commands

@@ -17,9 +17,9 @@ import { cn } from "@/lib/utils";
  * Two ways in, and deliberately no third.
  *
  * Creating an event asks for nothing up front — no team, no account, no name to
- * belong to. The controller username and password are chosen in the builder, at
- * the point where there is an event for them to own. Opening an existing event
- * needs that username and password and nothing else.
+ * belong to. The event password is chosen in the builder, at
+ * the point where there is an event for it to protect. Opening an existing event
+ * needs its event name and password and nothing else.
  *
  * The list of events below comes from this browser's own localStorage. There is no
  * endpoint that returns a directory of events, so nothing here can enumerate
@@ -108,7 +108,7 @@ export default function Home() {
           {mode === "create" ? (
             <div className="grid gap-3 rounded-[22px] border border-ink/8 bg-white/80 p-[18px] text-left shadow-[0_22px_70px_rgba(31,26,50,0.08),inset_0_1px_rgba(255,255,255,0.9)] backdrop-blur-2xl">
               <p className="text-[13px] leading-relaxed text-text-muted">
-                Build the run of show, then choose a controller username and password for the event
+                Build the run of show, then choose a password for the event
                 itself. No account, and nothing to sign up for.
               </p>
               <Button asChild variant="primary">
@@ -150,9 +150,6 @@ export default function Home() {
                       <span className="min-w-0">
                         <span className="block truncate text-[13px] font-semibold text-ink">
                           {entry.name}
-                        </span>
-                        <span className="block truncate text-[12px] text-text-subtle">
-                          {entry.loginName}
                         </span>
                       </span>
                       <ArrowRight size={15} aria-hidden className="shrink-0 text-text-subtle" />

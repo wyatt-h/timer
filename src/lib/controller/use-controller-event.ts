@@ -174,7 +174,6 @@ export function useControllerEvent(eventId: string) {
       rememberEvent({
         eventId: payload.event.id,
         name: payload.event.name,
-        loginName: payload.loginName,
       });
       coordinator.current?.resume(payload.version);
     },

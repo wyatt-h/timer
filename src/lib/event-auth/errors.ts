@@ -37,12 +37,12 @@ const STATUS: Record<EventAuthErrorCode, number> = {
 const MESSAGE: Record<EventAuthErrorCode, string> = {
   invalid_request: "That request could not be understood.",
   // Deliberately identical for an unknown login name and a wrong password.
-  invalid_credentials: "That username and password do not match an event.",
+  invalid_credentials: "That event name and password do not match.",
   session_required: "Sign in to this event again.",
   wrong_event: "This session is not for that event.",
   not_found: "That event could not be found.",
   conflict: "This event changed somewhere else. Reloading the latest version.",
-  login_taken: "That controller username is already in use.",
+  login_taken: "An event with that name already exists. Choose a different event name.",
   rate_limited: "Too many attempts. Wait a moment and try again.",
   unavailable: "Event storage is not configured.",
   internal: "Something went wrong saving that.",
@@ -81,7 +81,7 @@ export const NO_STORE_HEADERS: Record<string, string> = {
 
 /**
  * Records that something failed without recording what. Passwords, hashes,
- * session tokens and recovery codes are never arguments to this function, and
+ * session tokens are never arguments to this function, and
  * the caught value is reduced to a type name and a short message.
  */
 export function logInternal(scope: string, error: unknown) {

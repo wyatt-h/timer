@@ -73,24 +73,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<ApiResu
   return { ok: true, data: body as T };
 }
 
-/** A create or recover response, which is the only place a recovery code appears. */
-export type ControllerEventWithRecovery = ControllerEvent & { recoveryCode: string };
-
 export function createControllerEvent(input: {
-  loginName: string;
   password: string;
   event: TimerEvent;
 }) {
-  return request<ControllerEventWithRecovery>("/api/event-auth/create", {
+  return request<ControllerEvent>("/api/event-auth/create", {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
-export function loginToEvent(loginName: string, password: string) {
+export function loginToEvent(eventName: string, password: string) {
   return request<ControllerEvent>("/api/event-auth/login", {
     method: "POST",
-    body: JSON.stringify({ loginName, password }),
+    body: JSON.stringify({ eventName, password }),
   });
 }
 
@@ -101,31 +97,12 @@ export function logoutOfEvent(eventId: string) {
   });
 }
 
-export function recoverEvent(input: {
-  loginName: string;
-  recoveryCode: string;
-  newPassword: string;
-}) {
-  return request<ControllerEventWithRecovery>("/api/event-auth/recover", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
 export function changeControllerPassword(input: {
   eventId: string;
   currentPassword: string;
   newPassword: string;
 }) {
   return request<{ ok: true }>("/api/event-auth/change-password", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-/** Requires the current password again: a borrowed logged-in tab is not enough. */
-export function rotateRecoveryCode(input: { eventId: string; currentPassword: string }) {
-  return request<{ recoveryCode: string }>("/api/event-auth/rotate-recovery", {
     method: "POST",
     body: JSON.stringify(input),
   });

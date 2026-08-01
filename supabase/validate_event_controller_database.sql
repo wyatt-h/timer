@@ -2,7 +2,7 @@
  * Timer database validator
  *
  * Run this entire file in Supabase Dashboard -> SQL Editor after applying
- * 20260731010000_event_controller_auth.sql.
+ * 20260801000000_simplify_event_access.sql.
  *
  * READ-ONLY: this script creates, changes, and deletes nothing. It returns one
  * result table. The SUMMARY row must be PASS and every other row should be PASS.
@@ -82,7 +82,6 @@ expected_columns(table_name, column_name, data_type, udt_name, is_nullable) as (
     ('event_access', 'event_id', 'uuid', 'uuid', 'NO'),
     ('event_access', 'login_name', 'text', 'text', 'NO'),
     ('event_access', 'password_hash', 'text', 'text', 'NO'),
-    ('event_access', 'recovery_code_hash', 'text', 'text', 'NO'),
     ('event_access', 'password_version', 'integer', 'int4', 'NO'),
     ('event_access', 'created_at', 'timestamp with time zone', 'timestamptz', 'NO'),
     ('event_access', 'updated_at', 'timestamp with time zone', 'timestamptz', 'NO'),
@@ -168,15 +167,14 @@ expected_functions(signature) as (
     ('public.get_public_event(uuid)'),
     ('public.get_zoom_event(text)'),
     ('public.ms_to_timestamptz(bigint)'),
+    ('public.event_access_key(text)'),
     ('public.controller_event_payload(uuid)'),
     ('public.write_event_children(uuid,jsonb)'),
     ('public.issue_event_session(uuid,text,integer,integer)'),
-    ('public.create_controller_event(jsonb,text,text,text,text,integer)'),
+    ('public.create_controller_event(jsonb,text,text,integer)'),
     ('public.replace_controller_event(uuid,bigint,jsonb)'),
     ('public.delete_controller_event(uuid)'),
     ('public.change_controller_password(uuid,integer,text,text,integer)'),
-    ('public.recover_controller_password(uuid,integer,text,text,text,integer)'),
-    ('public.rotate_controller_recovery_code(uuid,integer,text)'),
     ('public.touch_event_session(text,integer)'),
     ('public.register_event_auth_attempt(text,text,text,integer,integer)'),
     ('public.clear_event_auth_attempts(text,text,text)')
@@ -189,12 +187,10 @@ security_definer_functions(signature) as (
     ('public.controller_event_payload(uuid)'),
     ('public.write_event_children(uuid,jsonb)'),
     ('public.issue_event_session(uuid,text,integer,integer)'),
-    ('public.create_controller_event(jsonb,text,text,text,text,integer)'),
+    ('public.create_controller_event(jsonb,text,text,integer)'),
     ('public.replace_controller_event(uuid,bigint,jsonb)'),
     ('public.delete_controller_event(uuid)'),
     ('public.change_controller_password(uuid,integer,text,text,integer)'),
-    ('public.recover_controller_password(uuid,integer,text,text,text,integer)'),
-    ('public.rotate_controller_recovery_code(uuid,integer,text)'),
     ('public.touch_event_session(text,integer)'),
     ('public.register_event_auth_attempt(text,text,text,integer,integer)'),
     ('public.clear_event_auth_attempts(text,text,text)')
@@ -202,12 +198,10 @@ security_definer_functions(signature) as (
 service_functions(signature) as (
   values
     ('public.controller_event_payload(uuid)'),
-    ('public.create_controller_event(jsonb,text,text,text,text,integer)'),
+    ('public.create_controller_event(jsonb,text,text,integer)'),
     ('public.replace_controller_event(uuid,bigint,jsonb)'),
     ('public.delete_controller_event(uuid)'),
     ('public.change_controller_password(uuid,integer,text,text,integer)'),
-    ('public.recover_controller_password(uuid,integer,text,text,text,integer)'),
-    ('public.rotate_controller_recovery_code(uuid,integer,text)'),
     ('public.touch_event_session(text,integer)'),
     ('public.register_event_auth_attempt(text,text,text,integer,integer)'),
     ('public.clear_event_auth_attempts(text,text,text)')
@@ -216,6 +210,7 @@ private_functions(signature) as (
   values
     ('public.public_event_payload(uuid)'),
     ('public.ms_to_timestamptz(bigint)'),
+    ('public.event_access_key(text)'),
     ('public.write_event_children(uuid,jsonb)'),
     ('public.issue_event_session(uuid,text,integer,integer)')
 ),
@@ -238,10 +233,10 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     exists (
       select 1
       from supabase_migrations.schema_migrations
-      where version = '20260731010000'
+      where version = '20260801000000'
     ),
     'FAIL',
-    'Expected version 20260731010000 in supabase_migrations.schema_migrations'
+    'Expected version 20260801000000 in supabase_migrations.schema_migrations'
 
   union all
   select
@@ -258,7 +253,7 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     'FAIL',
     coalesce((select string_agg(table_name || '.' || column_name || ': ' || problem,
                                 '; ' order by table_name, column_name)
-              from column_differences), 'All 57 column definitions match')
+              from column_differences), 'All 56 column definitions match')
 
   union all
   select
@@ -380,7 +375,7 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
       and exists (
         select 1 from pg_constraint
         where conrelid = 'public.event_access'::regclass and contype = 'c'
-          and pg_get_constraintdef(oid) like '%login_name%lower%'
+          and pg_get_constraintdef(oid) like '%login_name%event_access_key%'
       )
       and exists (
         select 1 from pg_constraint
@@ -420,7 +415,8 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
       and exists (
         select 1 from pg_constraint
         where conrelid = 'public.event_auth_attempts'::regclass and contype = 'c'
-          and pg_get_constraintdef(oid) like '%login%recover%create%rotate%'
+          and pg_get_constraintdef(oid) like '%login%create%'
+          and pg_get_constraintdef(oid) not like '%recover%'
       ),
     'FAIL',
     'Session/auth hashes must be 64 characters and rate-limit scope must be restricted'
@@ -604,11 +600,9 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
       join public.event_access a on a.event_id = e.id
       where e.version < 0
          or (e.zoom_token is not null and e.zoom_token <> upper(e.zoom_token))
-         or a.login_name <> lower(a.login_name)
-         or a.login_name !~ '^[a-z0-9][a-z0-9-]{2,47}$'
+         or a.login_name <> public.event_access_key(e.name)
          or a.password_version < 1
          or a.password_hash not like 'scrypt$%'
-         or a.recovery_code_hash not like 'scrypt$%'
     ),
     'FAIL',
     'Versions must be nonnegative; Zoom codes uppercase; credentials must match their required formats'
@@ -640,7 +634,7 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     450, 'data', 'rate-limit rows contain hashes only',
     not exists (
       select 1 from public.event_auth_attempts
-      where scope not in ('login', 'recover', 'create', 'rotate')
+      where scope not in ('login', 'create')
          or identifier_hash !~ '^[0-9a-f]{64}$'
          or address_hash !~ '^[0-9a-f]{64}$'
     ),

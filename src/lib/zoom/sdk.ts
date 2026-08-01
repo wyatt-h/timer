@@ -308,7 +308,6 @@ async function send(instance: ZoomSdk, command: ZoomTimerCommand) {
        * to those displays too, so the countdown stops at zero here.
        */
       await instance.setDynamicIndicator({
-        text: command.label,
         timer: {
           action: "start",
           direction: "down",
@@ -320,8 +319,7 @@ async function send(instance: ZoomSdk, command: ZoomTimerCommand) {
       });
       return;
     case "pause":
-      // Documented shape for a straight transition. Whether this preserves the
-      // indicator text is on the manual validation list.
+      // Documented shape for a straight transition.
       await instance.setDynamicIndicator({ timer: { action: "pause" } });
       return;
     case "resume":

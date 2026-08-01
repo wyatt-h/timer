@@ -11,7 +11,7 @@ import {
 } from "@/lib/server/session";
 
 /*
- * Changes an event's controller password from a device that already holds a
+ * Changes an event's password from a device that already holds a
  * session for it, and asks for the current password as well — a borrowed
  * logged-in browser should not be enough to take an event over.
  *

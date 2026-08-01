@@ -177,10 +177,9 @@ describe("ZoomTimer inside a meeting", () => {
     );
 
     const options = sdk.setDynamicIndicator.mock.calls[0][0] as {
-      text: string;
       timer: { action: string; direction: string; start: number; withSound: boolean };
     };
-    expect(options.text).toBe("Maya Chen");
+    expect(options).not.toHaveProperty("text");
     expect(options.timer).toMatchObject({
       action: "start",
       direction: "down",

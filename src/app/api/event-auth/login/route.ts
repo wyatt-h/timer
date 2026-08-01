@@ -8,18 +8,17 @@ import { apiError, apiSuccess, readJsonBody } from "@/lib/server/respond";
 import { issueEventSession } from "@/lib/server/session";
 
 /*
- * Opens one event from any device with that event's controller username and
- * password.
+ * Opens one event from any device with that event's name and password.
  *
  * The body carries no event id, and the response reveals no event the caller did
  * not just prove they hold the credentials for. An unknown username and a wrong
  * password take the same path, cost the same scrypt derivation, and produce the
  * same 401 with the same message, so this endpoint cannot be used to find out
- * which controller usernames exist.
+ * which event names exist.
  */
 
 const bodySchema = z.object({
-  loginName: z.string().min(1).max(200),
+  eventName: z.string().min(1).max(200),
   password: z.string().min(1).max(512),
 });
 
@@ -28,7 +27,7 @@ export async function POST(request: Request) {
     const parsed = bodySchema.safeParse(await readJsonBody(request));
     if (!parsed.success) throw new EventAuthError("invalid_request");
 
-    const loginName = normalizeLoginName(parsed.data.loginName);
+    const loginName = normalizeLoginName(parsed.data.eventName);
     const password = parsed.data.password;
 
     await enforceRateLimit("login", loginName, request);

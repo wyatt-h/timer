@@ -23,11 +23,10 @@ export type EventAccessRow = {
   event_id: string;
   login_name: string;
   password_hash: string;
-  recovery_code_hash: string;
   password_version: number;
 };
 
-const ACCESS_COLUMNS = "event_id, login_name, password_hash, recovery_code_hash, password_version";
+const ACCESS_COLUMNS = "event_id, login_name, password_hash, password_version";
 
 /** Returns null for an unknown login name. The caller must not say which it was. */
 export async function findAccessByLoginName(loginName: string): Promise<EventAccessRow | null> {
@@ -86,11 +85,6 @@ function credentialResult(raw: unknown): CredentialResult {
   return {
     status: "ok",
     passwordVersion: result.passwordVersion,
-    /*
-     * Present only for recovery, which builds it inside the transaction that
-     * replaced the password. Nothing after that commit may be allowed to fail: the
-     * response is carrying a one-time recovery code that cannot be shown again.
-     */
     payload: result.payload ? payloadOrThrow(result.payload) : null,
   };
 }
@@ -113,62 +107,20 @@ export async function changeControllerPassword(input: {
   return credentialResult(data);
 }
 
-export async function recoverControllerPassword(input: {
-  eventId: string;
-  expectedVersion: number;
-  passwordHash: string;
-  recoveryCodeHash: string;
-  sessionTokenHash: string;
-  sessionTtlSeconds: number;
-}): Promise<CredentialResult> {
-  const { data, error } = await supabaseAdmin().rpc("recover_controller_password", {
-    p_event_id: input.eventId,
-    p_expected_version: input.expectedVersion,
-    p_password_hash: input.passwordHash,
-    p_recovery_code_hash: input.recoveryCodeHash,
-    p_token_hash: input.sessionTokenHash,
-    p_ttl_seconds: input.sessionTtlSeconds,
-  });
-  if (error) throw new EventAuthError("internal");
-  return credentialResult(data);
-}
-
-/**
- * Replaces the recovery code and nothing else, so `password_version` does not move
- * and other devices stay signed in.
- */
-export async function rotateControllerRecoveryCode(input: {
-  eventId: string;
-  expectedVersion: number;
-  recoveryCodeHash: string;
-}): Promise<CredentialResult> {
-  const { data, error } = await supabaseAdmin().rpc("rotate_controller_recovery_code", {
-    p_event_id: input.eventId,
-    p_expected_version: input.expectedVersion,
-    p_recovery_code_hash: input.recoveryCodeHash,
-  });
-  if (error) throw new EventAuthError("internal");
-  return credentialResult(data);
-}
-
 export type CreateResult =
   | { status: "created"; payload: ControllerEvent }
   | { status: "login_taken" };
 
 export async function createControllerEvent(input: {
   event: unknown;
-  loginName: string;
   passwordHash: string;
-  recoveryCodeHash: string;
   /** The digest of the creating device's session token. The token stays in Node. */
   sessionTokenHash: string;
   sessionTtlSeconds: number;
 }): Promise<CreateResult> {
   const { data, error } = await supabaseAdmin().rpc("create_controller_event", {
     p_event: input.event,
-    p_login_name: input.loginName,
     p_password_hash: input.passwordHash,
-    p_recovery_code_hash: input.recoveryCodeHash,
     p_token_hash: input.sessionTokenHash,
     p_ttl_seconds: input.sessionTtlSeconds,
   });
@@ -194,6 +146,7 @@ export type ReplaceResult =
   /* The authoritative state comes back with the conflict so the browser can
    * show what actually happened instead of asking for it in a second round trip. */
   | { status: "conflict"; payload: ControllerEvent }
+  | { status: "login_taken" }
   | { status: "not_found" };
 
 export async function replaceControllerEvent(
@@ -209,6 +162,7 @@ export async function replaceControllerEvent(
   if (error) throw new EventAuthError("internal");
   const result = data as { status?: string; payload?: unknown } | null;
   if (result?.status === "not_found") return { status: "not_found" };
+  if (result?.status === "login_taken") return { status: "login_taken" };
   if (result?.status === "conflict") {
     return { status: "conflict", payload: payloadOrThrow(result.payload) };
   }

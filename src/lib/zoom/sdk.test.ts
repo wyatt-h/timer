@@ -246,7 +246,6 @@ describe("commands", () => {
 
     expect(outcome.status).toBe("applied");
     expect(sdk.setDynamicIndicator).toHaveBeenCalledWith({
-      text: "Maya Chen",
       timer: {
         action: "start",
         direction: "down",

@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   createBareDatabase,
   createMigratedDatabase,
@@ -32,6 +34,10 @@ afterAll(async () => {
 });
 
 const CONTROLLER_MIGRATION = "20260731010000_event_controller_auth.sql";
+const ACCESS_MIGRATION = "20260801000000_simplify_event_access.sql";
+const VALIDATOR = fileURLToPath(
+  new URL("../../supabase/validate_event_controller_database.sql", import.meta.url),
+);
 
 describe("the complete migration history", () => {
   it("applies to an empty database in filename order", async () => {
@@ -39,7 +45,7 @@ describe("the complete migration history", () => {
     // first failure, so reaching this point is the assertion. Named explicitly
     // because it is the check that guards against an unrunnable migration.
     const files = migrationFiles();
-    expect(files.at(-1)).toBe(CONTROLLER_MIGRATION);
+    expect(files.at(-1)).toBe(ACCESS_MIGRATION);
     expect(files).toEqual([...files].sort());
 
     const tables = await rows<{ table_name: string }>(
@@ -69,6 +75,21 @@ describe("the complete migration history", () => {
     expect(found?.count).toBe(1);
     await second.close();
   }, 120_000);
+
+  it("passes the same comprehensive validator used in the Supabase SQL editor", async () => {
+    await db.exec(`
+      create schema if not exists supabase_migrations;
+      create table if not exists supabase_migrations.schema_migrations (version text primary key);
+      insert into supabase_migrations.schema_migrations (version)
+      values ('20260801000000') on conflict do nothing;
+    `);
+    const report = await rows<{ area: string; status: string; details: string }>(
+      db,
+      readFileSync(VALIDATOR, "utf8"),
+    );
+    expect(report[0]).toMatchObject({ area: "SUMMARY", status: "PASS" });
+    expect(report.filter((row) => row.status === "FAIL")).toEqual([]);
+  });
 
   it("is one transaction, so a failure leaves nothing behind", () => {
     const sql = readMigration(CONTROLLER_MIGRATION);
@@ -272,13 +293,11 @@ describe("row level security", () => {
 
   it("makes every controller writer callable by service_role alone", async () => {
     const signatures = [
-      "public.create_controller_event(jsonb, text, text, text, text, integer)",
+      "public.create_controller_event(jsonb, text, text, integer)",
       "public.replace_controller_event(uuid, bigint, jsonb)",
       "public.delete_controller_event(uuid)",
       "public.controller_event_payload(uuid)",
       "public.change_controller_password(uuid, integer, text, text, integer)",
-      "public.recover_controller_password(uuid, integer, text, text, text, integer)",
-      "public.rotate_controller_recovery_code(uuid, integer, text)",
       "public.touch_event_session(text, integer)",
       "public.register_event_auth_attempt(text, text, text, integer, integer)",
       "public.clear_event_auth_attempts(text, text, text)",
@@ -316,7 +335,7 @@ describe("row level security", () => {
 describe("existing-row safety", () => {
   it("refuses to run when legacy team-owned events exist, and destroys nothing", async () => {
     const legacy = await createBareDatabase();
-    for (const file of migrationFiles().filter((name) => name !== CONTROLLER_MIGRATION)) {
+    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION].includes(name))) {
       await legacy.exec(readMigration(file));
     }
 
@@ -362,7 +381,7 @@ describe("existing-row safety", () => {
 
   it("runs once the operator has explicitly cleared the legacy rows", async () => {
     const legacy = await createBareDatabase();
-    for (const file of migrationFiles().filter((name) => name !== CONTROLLER_MIGRATION)) {
+    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION].includes(name))) {
       await legacy.exec(readMigration(file));
     }
     await legacy.exec(`
@@ -431,16 +450,14 @@ describe("controller event functions", () => {
     };
   }
 
-  async function create(loginName: string, overrides: Record<string, unknown> = {}) {
-    const document = await eventDocument(overrides);
+  async function create(eventName: string, overrides: Record<string, unknown> = {}) {
+    const document = await eventDocument({ name: eventName, ...overrides });
     const result = await one<{ result: Record<string, unknown> }>(
       db,
-      `select public.create_controller_event($1::jsonb, $2, $3, $4, $5, $6) as result`,
+      `select public.create_controller_event($1::jsonb, $2, $3, $4) as result`,
       [
         JSON.stringify(document),
-        loginName,
         "scrypt$fake-password-hash",
-        "scrypt$fake-recovery-hash",
         // A distinct 64-character digest per event, as a real token hash is.
         (await newUuid(db)).replace(/-/g, "").padEnd(64, "0"),
         3600,
@@ -466,7 +483,7 @@ describe("controller event functions", () => {
       `select name, version from public.events where id = $1`,
       [document.id],
     );
-    expect(stored?.name).toBe("Leadership Summit");
+    expect(stored?.name).toBe("summit-one");
 
     const access = await one<{ password_version: number }>(
       db,
@@ -496,7 +513,7 @@ describe("controller event functions", () => {
     expect(speakers?.count).toBeGreaterThan(0);
   });
 
-  it("refuses a duplicate controller username without writing anything", async () => {
+  it("refuses a duplicate event name without writing anything", async () => {
     await create("summit-duplicate");
     const before = await one<{ count: number }>(
       db,
@@ -513,8 +530,9 @@ describe("controller event functions", () => {
     expect(after?.count).toBe(before?.count);
   });
 
-  it("rejects a username the application would also reject", async () => {
-    await expect(create("Bad_Name")).rejects.toThrow(/event_access_login_name_check|violates/i);
+  it("canonicalizes the event name used for access", async () => {
+    const { result } = await create("Bad_Name");
+    expect((result.payload as Record<string, unknown>).loginName).toBe("bad_name");
   });
 
   it("increments the version on a matching write and refuses a stale one", async () => {
@@ -633,7 +651,7 @@ describe("controller event functions", () => {
     );
     expect(audience?.payload).toBeTruthy();
     const audienceEvent = audience!.payload.event as Record<string, unknown>;
-    expect(audienceEvent.name).toBe("Leadership Summit");
+    expect(audienceEvent.name).toBe("summit-public");
     // No team key, and no team value smuggled in under another name.
     expect(Object.keys(audience!.payload)).toEqual(["event"]);
     expect(JSON.stringify(audience!.payload)).not.toMatch(/team/i);
@@ -676,7 +694,7 @@ describe("controller event functions", () => {
     expect(again?.result.status).toBe("not_found");
   });
 
-  it("frees the controller username when the event is deleted", async () => {
+  it("frees the event name when the event is deleted", async () => {
     const { document } = await create("summit-reusable");
     await db.query(`select public.delete_controller_event($1)`, [document.id]);
     const { result } = await create("summit-reusable");
@@ -685,7 +703,7 @@ describe("controller event functions", () => {
 });
 
 describe("credential mutations are transactional", () => {
-  async function seed(loginName: string) {
+  async function seed(eventName: string) {
     const [id, viewerToken, agendaId, speakerId] = await Promise.all([
       newUuid(db),
       newUuid(db),
@@ -694,7 +712,7 @@ describe("credential mutations are transactional", () => {
     ]);
     const document = {
       id,
-      name: "Credential Event",
+      name: eventName,
       date: "2026-08-01",
       status: "draft",
       viewerToken,
@@ -710,12 +728,10 @@ describe("credential mutations are transactional", () => {
       runtime: { status: "ready", segmentIndex: 0, remainingSeconds: 600, soundEnabled: true },
     };
     await db.query(
-      `select public.create_controller_event($1::jsonb, $2, $3, $4, $5, $6)`,
+      `select public.create_controller_event($1::jsonb, $2, $3, $4)`,
       [
         JSON.stringify(document),
-        loginName,
         "scrypt$old-password",
-        "scrypt$old-recovery",
         (await newUuid(db)).replace(/-/g, "").padEnd(64, "0"),
         3600,
       ],
@@ -789,71 +805,26 @@ describe("credential mutations are transactional", () => {
     expect(sessions?.count).toBe(1);
   });
 
-  it("recovers a password and rotates the recovery code in the same commit", async () => {
-    const eventId = await seed("cred-recover");
-    const result = await one<{ result: Record<string, unknown> }>(
+  it("removes recovery credentials and functions from the final schema", async () => {
+    const column = await one<{ present: string | null }>(
       db,
-      `select public.recover_controller_password($1, 1, $2, $3, $4, 3600) as result`,
-      [eventId, "scrypt$recovered", "scrypt$new-recovery", "f".repeat(64)],
+      `select to_regclass('public.event_access')::text as present
+       where not exists (
+         select 1 from information_schema.columns
+         where table_schema = 'public' and table_name = 'event_access'
+           and column_name = 'recovery_code_hash'
+       )`,
     );
-    expect(result?.result.status).toBe("recovered");
+    expect(column?.present).toBe("event_access");
 
-    const access = await one<{
-      password_hash: string;
-      recovery_code_hash: string;
-      password_version: number;
-    }>(
+    const functions = await rows<{ proname: string }>(
       db,
-      `select password_hash, recovery_code_hash, password_version
-       from public.event_access where event_id = $1`,
-      [eventId],
+      `select proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and proname in (
+         'recover_controller_password', 'rotate_controller_recovery_code'
+       )`,
     );
-    expect(access?.password_hash).toBe("scrypt$recovered");
-    expect(access?.recovery_code_hash).toBe("scrypt$new-recovery");
-    expect(access?.password_version).toBe(2);
-
-    const sessions = await rows(
-      db,
-      `select token_hash from public.event_sessions where event_id = $1`,
-      [eventId],
-    );
-    expect(sessions).toHaveLength(1);
-  });
-
-  it("rotates a recovery code without disturbing the password or any session", async () => {
-    const eventId = await seed("cred-rotate");
-    await db.query(`select public.issue_event_session($1, $2, 1, 3600)`, [
-      eventId,
-      (await newUuid(db)).replace(/-/g, "").padEnd(64, "2"),
-    ]);
-
-    const result = await one<{ result: Record<string, unknown> }>(
-      db,
-      `select public.rotate_controller_recovery_code($1, 1, $2) as result`,
-      [eventId, "scrypt$rotated-recovery"],
-    );
-    expect(result?.result.status).toBe("rotated");
-
-    const access = await one<{
-      password_hash: string;
-      recovery_code_hash: string;
-      password_version: number;
-    }>(
-      db,
-      `select password_hash, recovery_code_hash, password_version
-       from public.event_access where event_id = $1`,
-      [eventId],
-    );
-    expect(access?.password_hash).toBe("scrypt$old-password");
-    expect(access?.recovery_code_hash).toBe("scrypt$rotated-recovery");
-    // Not a password change, so nobody is signed out.
-    expect(access?.password_version).toBe(1);
-    const sessions = await one<{ count: number }>(
-      db,
-      `select count(*)::int as count from public.event_sessions where event_id = $1`,
-      [eventId],
-    );
-    expect(sessions?.count).toBe(2);
+    expect(functions).toEqual([]);
   });
 
   it("reports a missing event rather than silently doing nothing", async () => {
@@ -866,27 +837,21 @@ describe("credential mutations are transactional", () => {
     );
     expect(changed?.result.status).toBe("not_found");
 
-    const rotated = await one<{ result: Record<string, unknown> }>(
-      db,
-      `select public.rotate_controller_recovery_code($1, 1, 'h') as result`,
-      [ghost],
-    );
-    expect(rotated?.result.status).toBe("not_found");
   });
 });
 
 describe("sessions", () => {
-  async function seed(loginName: string, tokenHash: string, ttlSeconds = 3600) {
+  async function seed(eventName: string, tokenHash: string, ttlSeconds = 3600) {
     const [id, viewerToken, agendaId, speakerId] = await Promise.all([
       newUuid(db),
       newUuid(db),
       newUuid(db),
       newUuid(db),
     ]);
-    await db.query(`select public.create_controller_event($1::jsonb, $2, $3, $4, $5, $6)`, [
+    await db.query(`select public.create_controller_event($1::jsonb, $2, $3, $4)`, [
       JSON.stringify({
         id,
-        name: "Session Event",
+        name: eventName,
         date: "2026-08-01",
         status: "draft",
         viewerToken,
@@ -900,9 +865,7 @@ describe("sessions", () => {
         ],
         runtime: { status: "ready", segmentIndex: 0, remainingSeconds: 600 },
       }),
-      loginName,
       "scrypt$p",
-      "scrypt$r",
       tokenHash,
       ttlSeconds,
     ]);
@@ -1158,16 +1121,19 @@ describe("rate limiting", () => {
     }
     expect((await register("login", identifier, address)).limited).toBe(true);
     // A different scope is a different budget.
-    expect((await register("recover", identifier, address)).limited).toBe(false);
+    expect((await register("create", identifier, address)).limited).toBe(false);
   });
 
-  it("accepts the rotate scope the recovery-rotation endpoint uses", async () => {
-    const result = await one<{ result: { limited: boolean } }>(
-      db,
-      `select public.register_event_auth_attempt('rotate', $1, $2, 900, 3) as result`,
-      ["c".repeat(64), "d".repeat(64)],
-    );
-    expect(result?.result.limited).toBe(false);
+  it("refuses removed recovery and rotation scopes", async () => {
+    for (const scope of ["recover", "rotate"]) {
+      await expect(
+        db.query(`select public.register_event_auth_attempt($1, $2, $3, 900, 3)`, [
+          scope,
+          "c".repeat(64),
+          "d".repeat(64),
+        ]),
+      ).rejects.toThrow(/event_auth_attempts_scope_check|violates/i);
+    }
   });
 
   it("refuses a scope it does not know", async () => {

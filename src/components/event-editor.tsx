@@ -16,7 +16,6 @@ import {
   type CredentialsDraft,
 } from "@/components/event-access/credentials-fields";
 import { ControllerSignInGate } from "@/components/event-access/controller-sign-in-gate";
-import { RecoveryCodePanel } from "@/components/event-access/recovery-code-panel";
 import { SaveStatusBadge } from "@/components/event-access/save-status-badge";
 import type { MaterialTextFieldElement } from "@/components/material-outlined-field";
 import { formatDuration } from "@/lib/format";
@@ -24,7 +23,6 @@ import { makeEvent } from "@/lib/store";
 import { useControllerEvent } from "@/lib/controller/use-controller-event";
 import { createControllerEvent } from "@/lib/event-auth/client";
 import { rememberEvent } from "@/lib/event-auth/local-events";
-import { normalizeLoginName } from "@/lib/event-auth/login-name";
 import { agendaFormSchema, type AgendaFormValues } from "@/lib/agenda-schema";
 import { toAgendaItems, toFormValues } from "@/lib/agenda-mapping";
 import type { TimerEvent } from "@/lib/types";
@@ -38,10 +36,9 @@ const EMPTY_AGENDA: AgendaFormValues = { agendaItems: [] };
 
 /*
  * A new event is not saved anywhere until it has credentials, so the builder ends
- * in two extra steps rather than one: choose the controller username and password
- * that will own the event, then write down the recovery code that is shown once.
+ * with a password. The event name itself is the sign-in identifier.
  */
-type Stage = "editing" | "credentials" | "recovery";
+type Stage = "editing" | "credentials";
 
 export function EventEditor() {
   const params = useParams<{ eventId?: string }>();
@@ -71,12 +68,6 @@ export function EventEditor() {
   const [pendingStart, setPendingStart] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
-  const [created, setCreated] = useState<{
-    event: TimerEvent;
-    loginName: string;
-    recoveryCode: string;
-    start: boolean;
-  } | null>(null);
   const nameField = useRef<MaterialTextFieldElement>(null);
   const saveNoticeTimer = useRef<number | null>(null);
 
@@ -218,7 +209,6 @@ export function EventEditor() {
     if (!isEditing) {
       setPendingStart(start);
       setStage("credentials");
-      setCreated(null);
       setCreateError("");
       setCredentialsTouched(false);
       return;
@@ -251,7 +241,7 @@ export function EventEditor() {
     save(true);
   }
 
-  /** Creates the event, its credentials, its session and its recovery code at once. */
+  /** Creates the event, its password and this device's session at once. */
   async function createEvent(start: boolean) {
     const next = buildNext(start);
     if (!next) return;
@@ -266,7 +256,6 @@ export function EventEditor() {
     setCreating(true);
     setCreateError("");
     const result = await createControllerEvent({
-      loginName: normalizeLoginName(credentials.loginName),
       password: credentials.password,
       event: next,
     });
@@ -280,18 +269,11 @@ export function EventEditor() {
     rememberEvent({
       eventId: result.data.event.id,
       name: result.data.event.name,
-      loginName: result.data.loginName,
     });
     // The credentials leave memory the moment they are no longer needed.
     setCredentials(EMPTY_CREDENTIALS);
     adoptSaved(result.data.event);
-    setCreated({
-      event: result.data.event,
-      loginName: result.data.loginName,
-      recoveryCode: result.data.recoveryCode,
-      start,
-    });
-    setStage("recovery");
+    router.push(start ? `/events/${result.data.event.id}` : "/");
   }
 
   const programmeSeconds = currentAgenda.agendaItems.reduce(
@@ -300,26 +282,15 @@ export function EventEditor() {
   );
 
   /*
-   * The credential and recovery steps replace the builder rather than floating
-   * over it. Both are decisions that cannot be half-made: an event with no
-   * credentials does not exist yet, and a recovery code that has not been written
-   * down cannot be shown again.
+   * The password step replaces the builder rather than floating over it. A new
+   * event does not exist until its password and first session are created.
    */
   if (stage !== "editing" && draft) {
     return (
       <main className="min-h-svh bg-paper" id="main">
         <AppHeader />
         <div className="mx-auto w-[min(560px,calc(100%-2.5rem))] pt-12 pb-24">
-          {stage === "recovery" && created ? (
-            <RecoveryCodePanel
-              code={created.recoveryCode}
-              eventName={created.event.name}
-              loginName={created.loginName}
-              continueLabel={created.start ? "Open the control room" : "Go home"}
-              onContinue={() => router.push(created.start ? `/events/${created.event.id}` : "/")}
-            />
-          ) : (
-            <Card className="grid gap-5 p-5">
+          <Card className="grid gap-5 p-5">
               <div>
                 <Button
                   variant="ghost"
@@ -332,11 +303,10 @@ export function EventEditor() {
                   Back to the run of show
                 </Button>
                 <h1 className="mt-3 text-[24px] font-semibold tracking-[-0.04em]">
-                  Who controls {draft.name.trim() || "this event"}?
+                  Set a password for {draft.name.trim() || "this event"}
                 </h1>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">
-                  These credentials belong to this event alone. Enter them on any other device to
-                  run the same event from there.
+                  On another device, enter the event name and this password to run the same event.
                 </p>
               </div>
 
@@ -367,8 +337,7 @@ export function EventEditor() {
                     ? "Create and start the event"
                     : "Create the event"}
               </Button>
-            </Card>
-          )}
+          </Card>
         </div>
       </main>
     );
@@ -402,7 +371,7 @@ export function EventEditor() {
               We couldn&apos;t find that event
             </h1>
             <p className="mb-5 text-[13px]">
-              Sign in with the event&apos;s controller username and password to open it.
+              Sign in with the event name and password to open it.
             </p>
             <Button variant="primary" onClick={() => router.push("/")}>
               Open an event

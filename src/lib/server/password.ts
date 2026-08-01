@@ -4,7 +4,7 @@ import { randomBytes, scrypt as nodeScrypt, timingSafeEqual } from "node:crypto"
 import { promisify } from "node:util";
 
 /*
- * Password and recovery-code hashing.
+ * Event-password hashing.
  *
  * `crypto.scrypt` is a memory-hard KDF that ships with Node, so there is no
  * native dependency to compile on Vercel purely to hash a password. The async
@@ -69,7 +69,7 @@ function parse(stored: string): Parsed | null {
 }
 
 /**
- * Hashes a password or a recovery code. The secret is used exactly as given —
+ * Hashes a password. The secret is used exactly as given —
  * not trimmed, not case-folded, not Unicode-normalised — because every one of
  * those would silently change what the owner typed.
  */

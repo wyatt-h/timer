@@ -5,7 +5,7 @@
  * screen can offer them again.
  *
  * Only what a person would see on the screen anyway is kept: an event id, its
- * display name, and the controller username used to open it. No password and no
+ * display name. No password and no
  * session token — the session is an HTTP-only cookie the browser
  * manages, and localStorage is readable by any script that ever runs on this
  * origin.
@@ -20,7 +20,6 @@ const STORAGE_KEY = "aura:events";
 export type RecentEvent = {
   eventId: string;
   name: string;
-  loginName: string;
 };
 
 function isRecentEvent(value: unknown): value is RecentEvent {
@@ -28,8 +27,7 @@ function isRecentEvent(value: unknown): value is RecentEvent {
   const candidate = value as Partial<RecentEvent>;
   return (
     typeof candidate.eventId === "string" &&
-    typeof candidate.name === "string" &&
-    typeof candidate.loginName === "string"
+    typeof candidate.name === "string"
   );
 }
 

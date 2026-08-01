@@ -280,7 +280,7 @@ export function ControlRoom() {
       <main className="grid min-h-svh place-items-center p-8 text-center text-text-muted">
         <div>
           <h1 className="mb-2.5 text-[26px] font-semibold tracking-[-0.04em] text-ink">We couldn&apos;t find that event</h1>
-          <p className="mb-5 text-[13px]">Sign in with the event&apos;s controller username and password to open it.</p>
+          <p className="mb-5 text-[13px]">Sign in with the event name and password to open it.</p>
           <button className="inline-flex min-h-11 items-center gap-2 rounded-control bg-violet px-4 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark" onClick={() => router.push("/")}>
             Open an event
           </button>

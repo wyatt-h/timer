@@ -1,11 +1,6 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import {
-  LOGIN_NAME_MAX_LENGTH,
-  loginNameProblem,
-  sanitizeLoginNameInput,
-} from "@/lib/event-auth/login-name";
 import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/event-auth/password-rules";
 
 /*
@@ -18,13 +13,11 @@ import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/event-auth/password-
  */
 
 export type CredentialsDraft = {
-  loginName: string;
   password: string;
   confirmPassword: string;
 };
 
 export const EMPTY_CREDENTIALS: CredentialsDraft = {
-  loginName: "",
   password: "",
   confirmPassword: "",
 };
@@ -32,7 +25,6 @@ export const EMPTY_CREDENTIALS: CredentialsDraft = {
 /** Null when the draft is ready to send. */
 export function credentialsProblem(draft: CredentialsDraft) {
   return (
-    loginNameProblem(draft.loginName) ??
     passwordProblem(draft.password) ??
     (draft.password === draft.confirmPassword ? null : "The two passwords do not match.")
   );
@@ -49,7 +41,6 @@ export function CredentialsFields({
   showErrors: boolean;
   disabled?: boolean;
 }) {
-  const nameError = showErrors ? loginNameProblem(draft.loginName) : null;
   const passwordError = showErrors ? passwordProblem(draft.password) : null;
   const confirmError =
     showErrors && draft.password !== draft.confirmPassword
@@ -59,23 +50,8 @@ export function CredentialsFields({
   return (
     <div className="grid gap-4">
       <Input
-        id="controller-login-name"
-        label="Controller username"
-        value={draft.loginName}
-        disabled={disabled}
-        required
-        autoComplete="username"
-        placeholder={`up to ${LOGIN_NAME_MAX_LENGTH} characters`}
-        supportingText="Lowercase letters, numbers, and hyphens. Unique across every event."
-        aria-invalid={Boolean(nameError)}
-        errorText={nameError ?? ""}
-        onValueChange={(value) =>
-          onChange({ ...draft, loginName: sanitizeLoginNameInput(value) })
-        }
-      />
-      <Input
         id="controller-password"
-        label="Controller password"
+        label="Event password"
         type="password"
         value={draft.password}
         disabled={disabled}
@@ -99,8 +75,8 @@ export function CredentialsFields({
         onValueChange={(confirmPassword) => onChange({ ...draft, confirmPassword })}
       />
       <p className="text-[12px] leading-relaxed text-text-subtle">
-        Anyone with this username and password can control the event from any device. They are the
-        only way in, so there is no account to sign in to and nothing to verify by email.
+        The event name and this password open the event on any device. There is no account or
+        recovery code, so choose a password you can share with the people running it.
       </p>
     </div>
   );

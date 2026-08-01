@@ -5,8 +5,8 @@ import { EventAuthError } from "@/lib/event-auth/errors";
 import { supabaseAdmin } from "@/lib/server/supabase-admin";
 
 /*
- * Rate limiting for every endpoint that accepts a guess: sign-in, recovery,
- * event creation, and minting a replacement recovery code.
+ * Rate limiting for every public endpoint that accepts a guess or creates data:
+ * sign-in and event creation.
  *
  * The counters live in PostgreSQL rather than in a Map, because a Vercel
  * function instance is ephemeral and an in-memory limit would reset under
@@ -18,22 +18,15 @@ import { supabaseAdmin } from "@/lib/server/supabase-admin";
  * the small space of possible addresses.
  */
 
-export type RateLimitScope = "login" | "recover" | "create" | "rotate";
+export type RateLimitScope = "login" | "create";
 
 type Budget = { windowSeconds: number; maxAttempts: number };
 
 const BUDGETS: Record<RateLimitScope, Budget> = {
   /* Ten wrong passwords in fifteen minutes is far past a typo. */
   login: { windowSeconds: 15 * 60, maxAttempts: 10 },
-  /* A recovery code is copied, not remembered, so the budget is tighter. */
-  recover: { windowSeconds: 60 * 60, maxAttempts: 5 },
   /* Creation is public; this is the brake on scripted event creation. */
   create: { windowSeconds: 60 * 60, maxAttempts: 20 },
-  /*
-   * Minting a recovery code needs the password again, so this brakes an attempt to
-   * guess it from a session that was left open.
-   */
-  rotate: { windowSeconds: 60 * 60, maxAttempts: 10 },
 };
 
 /**
