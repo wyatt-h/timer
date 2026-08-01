@@ -60,12 +60,6 @@ export interface TimerEvent {
   createdAt: number;
 }
 
-export interface Workspace {
-  team: string;
-  events: TimerEvent[];
-  updatedAt: number;
-}
-
 export interface TimerSegment {
   id: string;
   agendaItemId: string;

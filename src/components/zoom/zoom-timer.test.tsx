@@ -41,7 +41,6 @@ vi.mock("@/lib/store", () => ({
       createdAt: 0,
     };
     return {
-      result: { workspace: { team: "demo", events: [event], updatedAt: 0 }, event },
       event,
       connection: zoomTestState.connection,
     };

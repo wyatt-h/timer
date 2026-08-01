@@ -11,6 +11,17 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
   },
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      /*
+       * Next's compiler aliases `server-only` per bundling layer; outside a Next
+       * build the package throws by design. Tests exercise the server modules
+       * directly, so the marker resolves to the same empty module Next uses for
+       * its server layer.
+       */
+      "server-only": fileURLToPath(
+        new URL("./node_modules/next/dist/compiled/server-only/empty.js", import.meta.url),
+      ),
+    },
   },
 });

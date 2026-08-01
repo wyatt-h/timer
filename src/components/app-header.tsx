@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut } from "lucide-react";
+import { House } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 
-export function AppHeader({ team }: { team: string }) {
+/*
+ * There is no team and no workspace to name, so the header carries only the mark
+ * and a way home. An event is reached by its own address and its own credentials.
+ */
+export function AppHeader() {
   return (
     <>
       {/*
@@ -20,22 +24,15 @@ export function AppHeader({ team }: { team: string }) {
       </a>
 
       <header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-line bg-[rgba(250,250,251,0.84)] px-5 backdrop-blur-xl backdrop-saturate-150 sm:px-8 lg:px-14">
-        <Link href={`/t/${team}`} aria-label="Timer dashboard">
+        <Link href="/" aria-label="Timer home">
           <BrandMark />
         </Link>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-2 text-[12px] font-semibold text-text-muted">
-            <span className="grid size-7 place-items-center rounded-[9px] bg-[#eae4ff] text-[11px] font-bold text-[#5e42ca] uppercase">
-              {team.slice(0, 2)}
-            </span>
-            <span className="max-sm:sr-only">{team}</span>
-          </span>
-          <Button asChild variant="ghost" size="icon" aria-label="Switch team">
-            <Link href="/">
-              <LogOut size={15} aria-hidden />
-            </Link>
-          </Button>
-        </div>
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/">
+            <House size={15} aria-hidden />
+            Home
+          </Link>
+        </Button>
       </header>
     </>
   );

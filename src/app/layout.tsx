@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     template: "%s · Timer",
   },
   description:
-    "A focused, realtime event timer for speakers, panels, and the teams keeping the room on schedule.",
+    "A focused, realtime event timer for speakers, panels, and whoever is keeping the room on schedule.",
   openGraph: {
     title: "Timer",
     description: "Every moment, perfectly timed.",

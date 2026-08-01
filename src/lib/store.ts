@@ -1,32 +1,60 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import type { AgendaItem, TimerEvent, Workspace } from "@/lib/types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { AgendaItem, TimerEvent } from "@/lib/types";
 import { createSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { pullPublicEvent, pullZoomEvent, type PublicEventResult } from "@/lib/supabase/remote";
 import {
-  broadcastWorkspace,
-  pullPublicEvent,
-  pullWorkspace,
-  pullZoomEvent,
-  pushWorkspace,
-} from "@/lib/supabase/remote";
+  findCachedEventByViewerToken,
+  findCachedEventByZoomToken,
+  subscribeLocalChanges,
+} from "@/lib/controller/persistence";
+import { usePolling, type PollGuard } from "@/lib/controller/polling";
 
-const STORAGE_PREFIX = "aura:workspace:";
-const CHANNEL_NAME = "aura-timer-sync";
+/*
+ * Event construction, and the two anonymous read paths.
+ *
+ * An event is an independent resource: it has no team, no workspace and no owner
+ * beyond its own controller credentials. Everything a controller does with one
+ * lives in `useControllerEvent`; what remains here is how an event is built and
+ * how the two screens that hold no credentials read one — the audience display,
+ * by viewer token, and the Zoom App, by pairing code.
+ *
+ * Both read by polling, once a second, and neither ever writes. Nothing in this
+ * module opens a Supabase Realtime channel: a public channel is one anybody
+ * holding an audience link could also publish on, which would let them push a
+ * fabricated timer to every screen watching. Cloud synchronisation here is the
+ * poll, and the database is the only thing that can answer it.
+ *
+ * The loop itself lives in `@/lib/controller/polling`, shared with the controller,
+ * so all three screens get the same single-flight behaviour: one request at a time,
+ * one timer, reconciliation coalesced rather than raced, and a response from a
+ * superseded token discarded instead of applied.
+ */
 
+const POLL_INTERVAL_MS = 1000;
+/* While the tab is hidden nobody is reading it, so the poll backs right off. */
+const HIDDEN_POLL_INTERVAL_MS = 15_000;
+
+/**
+ * Every id here is persisted into a `uuid` column, so the fallback is v4-shaped
+ * too rather than a timestamp string the database would refuse.
+ */
 function makeId() {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-export function sanitizeTeamSlug(value: string) {
-  return value.toLowerCase().replace(/[^a-z]/g, "");
-}
-
-export function isValidTeamSlug(value: string) {
-  return /^[a-z]{2,32}$/.test(value);
+  const source: Crypto | undefined = typeof crypto === "undefined" ? undefined : crypto;
+  if (source?.randomUUID) return source.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (source?.getRandomValues) {
+    source.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export function makeAgendaItem(kind: "single" | "panel" = "single"): AgendaItem {
@@ -63,235 +91,126 @@ export function makeEvent(name = "Untitled event"): TimerEvent {
       panelStatus: null,
       panelRemainingSeconds: null,
       panelEndsAt: null,
+      soundEnabled: true,
       updatedAt: Date.now(),
     },
     createdAt: Date.now(),
   };
 }
 
-function demoWorkspace(team: string): Workspace {
-  const event = makeEvent("Annual Leadership Summit");
-  event.agenda = [
-    {
-      id: makeId(),
-      kind: "single",
-      durationSeconds: 12 * 60,
-      speakers: [{ id: makeId(), name: "Maya Chen", durationSeconds: 12 * 60 }],
-    },
-    {
-      id: makeId(),
-      kind: "panel",
-      durationSeconds: 25 * 60,
-      speakerDefaultSeconds: 8 * 60,
-      speakers: [
-        { id: makeId(), name: "Noah Williams", durationSeconds: 8 * 60 },
-        { id: makeId(), name: "Sofia Patel", durationSeconds: 8 * 60 },
-        { id: makeId(), name: "Marcus Reed", durationSeconds: 9 * 60 },
-      ],
-    },
-    {
-      id: makeId(),
-      kind: "single",
-      durationSeconds: 8 * 60,
-      speakers: [{ id: makeId(), name: "Elena Park", durationSeconds: 8 * 60 }],
-    },
-  ];
-  event.runtime.remainingSeconds = event.agenda[0].durationSeconds;
+/**
+ * How a read-only screen is currently doing.
+ *
+ * `unavailable` and `not-found` are deliberately different: the first keeps the
+ * last known timer on screen behind a warning, the second clears it.
+ */
+export type PublicConnection = "connecting" | "live" | "not-found" | "unavailable";
 
-  const completed = makeEvent("Spring Product Forum");
-  completed.status = "completed";
-  completed.date = new Date(Date.now() - 1000 * 60 * 60 * 24 * 36).toISOString().slice(0, 10);
+/**
+ * The audience display's read: one event, addressed by its unguessable viewer
+ * token, with no credentials involved at any point.
+ *
+ * Two sources. A once-a-second poll of the durable state is the authority. This
+ * device's own controller cache is consulted as well, so an operator previewing
+ * their own audience link on the machine running the show sees their saves
+ * immediately and without a round trip.
+ */
+export function usePublicEvent(token: string) {
+  const [event, setEvent] = useState<TimerEvent | null>(null);
+  const [connection, setConnection] = useState<PublicConnection>("connecting");
 
-  return { team, events: [event, completed], updatedAt: Date.now() };
-}
+  const client = useRef(isSupabaseConfigured() ? createSupabaseBrowserClient() : null);
 
-function storageKey(team: string) {
-  return `${STORAGE_PREFIX}${team}`;
-}
-
-export function loadWorkspace(team: string): Workspace | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(storageKey(team));
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Workspace;
-  } catch {
-    return null;
-  }
-}
-
-export function ensureWorkspace(team: string) {
-  const current = loadWorkspace(team);
-  if (current) return current;
-  const workspace = demoWorkspace(team);
-  persistWorkspace(workspace);
-  return workspace;
-}
-
-export function persistWorkspace(workspace: Workspace) {
-  if (typeof window === "undefined") return;
-  const next = { ...workspace, updatedAt: Date.now() };
-  window.localStorage.setItem(storageKey(workspace.team), JSON.stringify(next));
-  try {
-    const channel = new BroadcastChannel(CHANNEL_NAME);
-    channel.postMessage({ team: workspace.team, updatedAt: next.updatedAt });
-    channel.close();
-  } catch {
-    // The storage event remains a reliable fallback.
-  }
-  if (isSupabaseConfigured()) {
-    const client = createSupabaseBrowserClient();
-    if (client) {
-      void broadcastWorkspace(client, next).catch(() => undefined);
-      void client.auth.getSession().then(({ data }) => {
-        if (data.session) void pushWorkspace(client, next).catch(() => undefined);
-      });
+  const apply = useCallback((result: PublicEventResult) => {
+    if (result.status === "found") {
+      setEvent(result.event);
+      setConnection("live");
+      return;
     }
-  }
-}
-
-export function findEventByToken(token: string): { workspace: Workspace; event: TimerEvent } | null {
-  return findEventBy((event) => event.viewerToken === token);
-}
-
-/** Local-mode counterpart of the Zoom pairing-code lookup. */
-export function findEventByZoomToken(
-  zoomToken: string,
-): { workspace: Workspace; event: TimerEvent } | null {
-  return findEventBy((event) => event.zoomToken === zoomToken);
-}
-
-function findEventBy(
-  matches: (event: TimerEvent) => boolean,
-): { workspace: Workspace; event: TimerEvent } | null {
-  if (typeof window === "undefined") return null;
-  for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
-    if (!key?.startsWith(STORAGE_PREFIX)) continue;
-    try {
-      const workspace = JSON.parse(window.localStorage.getItem(key) ?? "") as Workspace;
-      const event = workspace.events.find(matches);
-      if (event) return { workspace, event };
-    } catch {
-      // Ignore unrelated or malformed local data.
+    if (result.status === "not-found") {
+      /*
+       * The database answered and there is no such event, so it has been deleted
+       * or the token is wrong. An already-open screen must stop showing it.
+       */
+      setEvent(null);
+      setConnection("not-found");
+      return;
     }
-  }
-  return null;
-}
-
-export function useWorkspace(team: string) {
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
-
-  const refresh = useCallback(() => {
-    setWorkspace(ensureWorkspace(team));
-  }, [team]);
+    // Nothing is known. Keep whatever is on screen and say the link is down.
+    setConnection("unavailable");
+  }, []);
 
   useEffect(() => {
-    queueMicrotask(refresh);
-    if (isSupabaseConfigured()) {
-      const client = createSupabaseBrowserClient();
-      if (client) {
-        void client.auth.getSession().then(async ({ data }) => {
-          if (!data.session) return;
-          try {
-            const remote = await pullWorkspace(client, team);
-            if (remote?.events.length) {
-              window.localStorage.setItem(storageKey(team), JSON.stringify(remote));
-              setWorkspace(remote);
-            } else {
-              await pushWorkspace(client, ensureWorkspace(team));
-            }
-          } catch {
-            // Local mode remains available if cloud sync is temporarily unavailable.
-          }
-        });
-      }
-    }
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === storageKey(team)) refresh();
-    };
-    window.addEventListener("storage", onStorage);
-    let channel: BroadcastChannel | null = null;
-    try {
-      channel = new BroadcastChannel(CHANNEL_NAME);
-      channel.onmessage = (event) => {
-        if (event.data?.team === team) refresh();
-      };
-    } catch {
-      channel = null;
-    }
+    /*
+     * This device's own cache paints first, so an operator previewing their own
+     * audience link on the machine running the show sees it without a round trip.
+     *
+     * A viewer token *is* an event, so a change of token replaces what is on screen
+     * rather than leaving it there. Keeping the previous event visible "until the
+     * new one answers" means a room can be shown another event's countdown under a
+     * link that has nothing to do with it — and if the new token is unreachable, be
+     * shown it indefinitely. This token's cached event takes over if this device has
+     * one; otherwise the screen clears while it connects.
+     *
+     * Cancelled with the effect, so a lookup queued for a token that has since been
+     * replaced — or for a screen that has gone away — does nothing.
+     */
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setEvent(findCachedEventByViewerToken(token) ?? null);
+      /*
+       * A definitive answer about the *previous* token says nothing about this one.
+       * `unavailable` is left alone because it is also the answer when there is no
+       * client at all, which the leading poll has already reported by now.
+       */
+      setConnection((current) =>
+        current === "live" || current === "not-found" ? "connecting" : current,
+      );
+    });
     return () => {
-      window.removeEventListener("storage", onStorage);
-      channel?.close();
+      cancelled = true;
     };
-  }, [refresh, team]);
+  }, [token]);
 
-  const update = useCallback(
-    (updater: (current: Workspace) => Workspace) => {
-      setWorkspace((current) => {
-        const base = current ?? ensureWorkspace(team);
-        const next = updater(base);
-        persistWorkspace(next);
-        return next;
-      });
-    },
-    [team],
+  usePolling(
+    useCallback(
+      async (guard: PollGuard) => {
+        const active = client.current;
+        if (!active) {
+          setConnection((current) => (current === "connecting" ? "unavailable" : current));
+          return;
+        }
+        const result = await pullPublicEvent(active, token);
+        /*
+         * A response that outlived its effect belongs to a token that is no longer
+         * on screen, or to an unmounted component. Applying it would put another
+         * event's timer in front of the room.
+         */
+        if (!guard.isCurrent()) return;
+        apply(result);
+      },
+      [apply, token],
+    ),
+    Boolean(token),
+    { visibleIntervalMs: POLL_INTERVAL_MS, hiddenIntervalMs: HIDDEN_POLL_INTERVAL_MS },
   );
 
-  return { workspace, update, refresh };
-}
-
-export function usePublicEvent(token: string) {
-  const [result, setResult] = useState<ReturnType<typeof findEventByToken>>(null);
-
-  const refresh = useCallback(() => setResult(findEventByToken(token)), [token]);
-
+  /*
+   * Same-device tabs. Keyed on the resolved event id, because that is what the
+   * controller writes its cache under — subscribing by viewer token listened to a
+   * key that never changes and so never fired.
+   */
+  const eventId = event?.id;
   useEffect(() => {
-    queueMicrotask(refresh);
-    const onStorage = () => refresh();
-    window.addEventListener("storage", onStorage);
-    let localChannel: BroadcastChannel | null = null;
-    try {
-      localChannel = new BroadcastChannel(CHANNEL_NAME);
-      localChannel.onmessage = refresh;
-    } catch {
-      localChannel = null;
-    }
-    let cloudInterval: number | null = null;
-    let realtimeChannel: RealtimeChannel | null = null;
-    let realtimeClient: SupabaseClient | null = null;
-    if (isSupabaseConfigured()) {
-      const client = createSupabaseBrowserClient();
-      if (client) {
-        realtimeClient = client;
-        const cloudRefresh = async () => {
-          const cloudResult = await pullPublicEvent(client, token);
-          if (cloudResult) setResult(cloudResult);
-        };
-        void cloudRefresh();
-        cloudInterval = window.setInterval(() => void cloudRefresh(), 1000);
-        realtimeChannel = client
-          .channel(`event:${token}`)
-          .on("broadcast", { event: "state" }, ({ payload }) => {
-            if (!payload?.event || !payload?.team) return;
-            const event = payload.event as TimerEvent;
-            setResult({
-              workspace: { team: payload.team, events: [event], updatedAt: Date.now() },
-              event,
-            });
-          })
-          .subscribe();
-      }
-    }
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      localChannel?.close();
-      if (realtimeChannel) void realtimeClient?.removeChannel(realtimeChannel);
-      if (cloudInterval) window.clearInterval(cloudInterval);
-    };
-  }, [refresh, token]);
+    if (!eventId) return;
+    return subscribeLocalChanges(eventId, () => {
+      const cached = findCachedEventByViewerToken(token);
+      if (cached) setEvent(cached);
+    });
+  }, [eventId, token]);
 
-  return result;
+  return { event, connection };
 }
 
 export type ZoomEventConnection =
@@ -306,106 +225,74 @@ export type ZoomEventConnection =
  * The Zoom App's read path: an event addressed by its pairing code rather than
  * by an audience token. It is deliberately a sibling of `usePublicEvent` rather
  * than a generalisation of it — the audience display is the one screen that must
- * never regress, and the realtime channel here can only be joined after the
- * first lookup resolves the event's viewer token.
+ * never regress.
  *
- * Read-only throughout. Supabase stays the authoritative timer.
+ * Read-only throughout, by polling. Supabase stays the authoritative timer, and
+ * the Zoom page has no way to write to it or to tell any other screen anything.
  */
 export function useZoomEvent(zoomToken: string) {
-  const [result, setResult] = useState<ReturnType<typeof findEventByZoomToken>>(null);
+  const [event, setEvent] = useState<TimerEvent | null>(null);
   const [connection, setConnection] = useState<ZoomEventConnection>("idle");
 
-  useEffect(() => {
-    let active = true;
+  const client = useRef(isSupabaseConfigured() ? createSupabaseBrowserClient() : null);
 
+  useEffect(() => {
     /*
      * State is set from a microtask rather than straight from the effect body,
      * which is how the rest of this module keeps a subscription's first paint
-     * out of the render that created it.
+     * out of the render that created it. Cancelled with the effect, so a lookup
+     * queued for one pairing code cannot resolve onto a screen that has since
+     * been given a different one — or unmounted.
      */
-    if (!zoomToken) {
-      queueMicrotask(() => {
-        if (!active) return;
-        setResult(null);
-        setConnection("idle");
-      });
-      return () => {
-        active = false;
-      };
-    }
-
-    const local = findEventByZoomToken(zoomToken);
-    const client = isSupabaseConfigured() ? createSupabaseBrowserClient() : null;
-
+    let cancelled = false;
     queueMicrotask(() => {
-      if (!active) return;
-      if (local) setResult(local);
-      setConnection(client ? "connecting" : local ? "polling" : "unavailable");
-    });
-
-    if (!client) {
-      return () => {
-        active = false;
-      };
-    }
-
-    const pull = async () => {
-      const cloudResult = await pullZoomEvent(client, zoomToken);
-      if (!active) return;
-      if (cloudResult) {
-        setResult(cloudResult);
-        // A live realtime channel upgrades this to "live" on its own.
-        setConnection((current) => (current === "live" ? current : "polling"));
-      } else {
-        setConnection((current) => (current === "connecting" ? "not-found" : current));
+      if (cancelled) return;
+      if (!zoomToken) {
+        setEvent(null);
+        setConnection("idle");
+        return;
       }
-    };
-
-    void pull();
-    const interval = window.setInterval(() => void pull(), 1000);
-
+      const local = findCachedEventByZoomToken(zoomToken);
+      /*
+       * A new pairing code is a different event, so the previous one's timer is
+       * replaced rather than left on screen underneath it — the meeting would
+       * otherwise be shown a countdown belonging to something else.
+       */
+      setEvent(local ?? null);
+      setConnection(client.current ? "connecting" : local ? "polling" : "unavailable");
+    });
     return () => {
-      active = false;
-      window.clearInterval(interval);
+      cancelled = true;
     };
   }, [zoomToken]);
 
-  /*
-   * The audience broadcast carries the whole event on every control-room write,
-   * so the Zoom App rides along on the channel the audience displays already
-   * use. It can only be joined once a lookup has told us the viewer token.
-   */
-  const viewerToken = result?.event.viewerToken;
-  const team = result?.workspace.team;
+  usePolling(
+    useCallback(
+      async (guard: PollGuard) => {
+        const active = client.current;
+        if (!active) return;
+        const result = await pullZoomEvent(active, zoomToken);
+        // The pairing code may have been changed while this was on the wire.
+        if (!guard.isCurrent()) return;
+        if (result.status === "found") {
+          setEvent(result.event);
+          setConnection("live");
+          return;
+        }
+        if (result.status === "not-found") {
+          // Deleted, or a code that matches nothing. Stop showing a stale timer.
+          setEvent(null);
+          setConnection("not-found");
+          return;
+        }
+        // Keep the last known timer; say the connection is the problem.
+        setConnection("unavailable");
+      },
+      [zoomToken],
+    ),
+    Boolean(zoomToken),
+    { visibleIntervalMs: POLL_INTERVAL_MS, hiddenIntervalMs: HIDDEN_POLL_INTERVAL_MS },
+  );
 
-  useEffect(() => {
-    if (!zoomToken || !viewerToken || !isSupabaseConfigured()) return;
-    const client = createSupabaseBrowserClient();
-    if (!client) return;
-
-    const channel: RealtimeChannel = client
-      .channel(`event:${viewerToken}`)
-      .on("broadcast", { event: "state" }, ({ payload }) => {
-        if (!payload?.event) return;
-        const event = payload.event as TimerEvent;
-        if (event.zoomToken && event.zoomToken !== zoomToken) return;
-        setResult({
-          workspace: {
-            team: payload.team ?? team ?? "",
-            events: [event],
-            updatedAt: Date.now(),
-          },
-          event,
-        });
-      })
-      .subscribe((status) => {
-        setConnection(status === "SUBSCRIBED" ? "live" : "polling");
-      });
-
-    return () => {
-      void client.removeChannel(channel);
-    };
-  }, [team, viewerToken, zoomToken]);
-
-  return { result, event: result?.event ?? null, connection };
+  return { event, connection };
 }

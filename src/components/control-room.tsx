@@ -55,7 +55,15 @@ import {
   panelLabel,
   timerTone,
 } from "@/lib/format";
-import { makeAgendaItem, useWorkspace } from "@/lib/store";
+import { makeAgendaItem } from "@/lib/store";
+import {
+  useControllerEvent,
+  type ConflictResolution,
+} from "@/lib/controller/use-controller-event";
+import { ControllerAccessCard } from "@/components/event-access/controller-access-card";
+import { ControllerSignInGate } from "@/components/event-access/controller-sign-in-gate";
+import { SaveStatusBadge } from "@/components/event-access/save-status-badge";
+import type { SaveState } from "@/lib/save-coordinator";
 import { useShortcuts, useThrottledAnnouncement } from "@/lib/use-shortcuts";
 import { formatZoomToken, makeZoomToken } from "@/lib/zoom/token";
 import type { AgendaItem, TimerEvent, RuntimeState, Speaker, TimerSegment } from "@/lib/types";
@@ -220,13 +228,37 @@ const SHORTCUT_HELP = [
 ];
 
 export function ControlRoom() {
-  const params = useParams<{ team: string; eventId: string }>();
+  const params = useParams<{ eventId: string }>();
   const router = useRouter();
-  const { workspace, update } = useWorkspace(params.team);
-  const event = workspace?.events.find((candidate) => candidate.id === params.eventId);
+  /*
+   * One event, addressed by its own id. There is no team in the URL and no
+   * workspace to search: the session cookie named after this event is the whole
+   * authorization, and a browser without one gets the not-found screen below.
+   */
+  const controller = useControllerEvent(params.eventId);
+  const event = controller.event;
   const segments = useMemo(() => (event ? flattenSegments(event) : []), [event]);
 
-  if (!workspace) {
+  /*
+   * The session is gone but the event is not. Local data — the cached event and any
+   * unsaved edit — is untouched, so this asks for the password rather than throwing
+   * anything away.
+   */
+  if (controller.status === "authorization-required") {
+    return (
+      <ControllerSignInGate
+        eventId={params.eventId}
+        eventName={event?.name}
+        hasUnsavedWork={controller.hasUnsavedWork()}
+        onResumed={() => void controller.resumeAfterSignIn()}
+      />
+    );
+  }
+
+  if (
+    controller.status === "loading" ||
+    (!event && controller.status !== "not-found" && controller.status !== "unavailable")
+  ) {
     return (
       <main className="min-h-svh bg-[radial-gradient(circle_at_9%_0%,rgba(119,87,237,0.1),transparent_22%),#f5f5f7] px-3 pb-8 sm:px-5">
         <div aria-busy="true" aria-label="Loading the control room" className="mx-auto mt-24 grid w-[min(1420px,100%)] grid-cols-[380px_minmax(0,1fr)] gap-4 max-md:grid-cols-1">
@@ -237,14 +269,20 @@ export function ControlRoom() {
     );
   }
 
+  /*
+   * The same screen for an event the server says does not exist and for an event id
+   * somebody guessed. Nothing here confirms that a particular event exists, which
+   * is what stops the address bar from being a way to discover other people's
+   * events.
+   */
   if (!event || !event.runtime || !segments.length) {
     return (
       <main className="grid min-h-svh place-items-center p-8 text-center text-text-muted">
         <div>
           <h1 className="mb-2.5 text-[26px] font-semibold tracking-[-0.04em] text-ink">We couldn&apos;t find that event</h1>
-          <p className="mb-5 text-[13px]">It may have been deleted, or the link points at a different workspace.</p>
-          <button className="inline-flex min-h-11 items-center gap-2 rounded-control bg-violet px-4 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark" onClick={() => router.push(`/t/${params.team}`)}>
-            Return to events
+          <p className="mb-5 text-[13px]">Sign in with the event&apos;s controller username and password to open it.</p>
+          <button className="inline-flex min-h-11 items-center gap-2 rounded-control bg-violet px-4 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark" onClick={() => router.push("/")}>
+            Open an event
           </button>
         </div>
       </main>
@@ -254,22 +292,56 @@ export function ControlRoom() {
   return (
     <LiveConsole
       key={event.id}
-      team={params.team}
       event={event}
       segments={segments}
-      update={update}
+      update={controller.update}
+      saveState={controller.saveState}
+      onRetrySave={controller.retrySave}
+      onDiscardLocal={controller.discardLocalChanges}
+      onKeepLocal={controller.keepLocalChanges}
+      conflictResolution={controller.conflictResolution}
+      onFlushSaves={controller.flushSaves}
+      onDelete={controller.remove}
+      onSignOut={controller.signOut}
     />
   );
 }
 
 type LiveConsoleProps = {
-  team: string;
   event: TimerEvent;
   segments: TimerSegment[];
-  update: ReturnType<typeof useWorkspace>["update"];
+  update: (updater: (current: TimerEvent) => TimerEvent) => void;
+  saveState: SaveState;
+  onRetrySave: () => void;
+  onDiscardLocal: () => Promise<{ ok: boolean; message?: string }>;
+  onKeepLocal: () => Promise<{ ok: boolean; message?: string }>;
+  onFlushSaves: () => void;
+  onDelete: () => Promise<{ ok: boolean; message?: string }>;
+  onSignOut: (options?: { discardUnsaved?: boolean }) => Promise<{
+    ok: boolean;
+    message?: string;
+  }>;
+  /** Which conflict choice is awaiting the server, if either. */
+  conflictResolution: ConflictResolution | null;
 };
 
-function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
+function LiveConsole({
+  event,
+  segments,
+  update,
+  saveState,
+  onRetrySave,
+  onDiscardLocal,
+  onKeepLocal,
+  onFlushSaves,
+  onDelete,
+  onSignOut,
+  conflictResolution,
+}: LiveConsoleProps) {
+  const router = useRouter();
+  const [accessError, setAccessError] = useState("");
+  const [signOutConfirmed, setSignOutConfirmed] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const runtime = event.runtime;
   const [displaySeconds, setDisplaySeconds] = useState(runtime.remainingSeconds);
   const [panelDisplaySeconds, setPanelDisplaySeconds] = useState(
@@ -356,6 +428,24 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
     return () => window.clearInterval(interval);
   }, []);
 
+  /*
+   * A debounced save must not be lost because the operator closed the tab or
+   * switched to another app. Both moments send whatever is still unsaved
+   * immediately rather than waiting out the debounce that will never finish.
+   */
+  useEffect(() => {
+    const flush = () => onFlushSaves();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [onFlushSaves]);
+
   const speakerTone = timerTone(displaySeconds, current.durationSeconds);
   const panelTone = timerTone(panelDisplaySeconds, currentItem.durationSeconds);
   const speakerProgress = elapsedRatio(displaySeconds, current.durationSeconds);
@@ -365,14 +455,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
     `${current.speaker}. ${describeTimer(displaySeconds)}.`,
   );
 
-  function mutateEvent(updater: (current: TimerEvent) => TimerEvent) {
-    update((currentWorkspace) => ({
-      ...currentWorkspace,
-      events: currentWorkspace.events.map((candidate) =>
-        candidate.id === event.id ? updater(candidate) : candidate,
-      ),
-    }));
-  }
+  const mutateEvent = update;
 
   function setRuntime(patch: Partial<RuntimeState>, eventPatch?: Partial<TimerEvent>) {
     mutateEvent((currentEvent) => ({
@@ -1038,9 +1121,9 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
         */}
       <header className="sticky top-0 z-30 -mx-3 mb-5 flex min-h-[76px] flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line bg-[rgba(248,248,250,0.9)] px-4 py-2.5 backdrop-blur-2xl backdrop-saturate-150 sm:-mx-5 sm:px-6">
         <div className="flex shrink-0 items-center gap-2">
-          <Link className="inline-flex min-h-9 items-center gap-2 rounded-control px-3 text-[12px] font-semibold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" href={`/t/${team}`}>
+          <Link className="inline-flex min-h-9 items-center gap-2 rounded-control px-3 text-[12px] font-semibold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" href="/">
             <ArrowLeft size={15} aria-hidden />
-            Events
+            Home
           </Link>
           <BrandMark />
         </div>
@@ -1049,6 +1132,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
             {event.name}
           </h1>
           <LiveClock />
+          <SaveStatusBadge state={saveState} onRetry={onRetrySave} />
           <button
             className={cn("grid size-11 shrink-0 place-items-center rounded-control border border-line bg-white text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark", !soundEnabled && "bg-surface-sunken text-text-subtle")}
             onClick={toggleSound}
@@ -1080,7 +1164,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
           >
             <Keyboard size={15} />
           </button>
-          <Link className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line bg-white px-3 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover" href={`/t/${team}/events/${event.id}/edit`}>
+          <Link className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line bg-white px-3 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover" href={`/events/${event.id}/edit`}>
             <Pencil size={14} />
             Edit
           </Link>
@@ -1120,6 +1204,61 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
           )}
         </div>
       </header>
+
+      {saveState === "conflict" && (
+        <div
+          role="alert"
+          className="mx-auto mb-4 grid w-[min(1420px,100%)] gap-2.5 rounded-card border border-over/25 bg-over-soft px-5 py-4"
+        >
+          <strong className="text-[13px] font-semibold text-over">
+            This event was changed somewhere else
+          </strong>
+          <p className="text-[12px] leading-relaxed text-text-muted">
+            Your unsaved changes are still here and the other version is stored. Nothing has been
+            overwritten — choose which one to keep.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {/*
+              * Both are disabled while either is awaiting the server, because the
+              * hook refuses a second resolution rather than queueing it: the second
+              * choice was made against a picture that the first one is replacing.
+              */}
+            <button
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-control bg-violet px-3 text-[12px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={conflictResolution !== null}
+              onClick={() => {
+                setAccessError("");
+                void onDiscardLocal().then((result) => {
+                  if (!result.ok) setAccessError(result.message ?? "That did not work.");
+                });
+              }}
+            >
+              {conflictResolution === "discard" ? "Loading that version…" : "Use the other version"}
+            </button>
+            <button
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line bg-white px-3 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={conflictResolution !== null}
+              onClick={() => {
+                setAccessError("");
+                void onKeepLocal().then((result) => {
+                  if (!result.ok) setAccessError(result.message ?? "That did not work.");
+                });
+              }}
+            >
+              {conflictResolution === "keep" ? "Keeping your changes…" : "Keep my changes"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {accessError && (
+        <div
+          role="alert"
+          className="mx-auto mb-4 w-[min(1420px,100%)] rounded-card border border-over/25 bg-over-soft px-5 py-3 text-[12px] font-medium text-over"
+        >
+          {accessError}
+        </div>
+      )}
 
       {showShortcuts && (
         <div className="mx-auto mb-4 grid w-[min(1420px,100%)] grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-x-5 gap-y-2 rounded-card border border-line bg-white/95 px-5 py-4" role="region" aria-label="Keyboard shortcuts">
@@ -1308,6 +1447,30 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
             </p>
           </div>
 
+          <ControllerAccessCard
+            eventId={event.id}
+            onSignOut={() => {
+              setAccessError("");
+              void onSignOut({ discardUnsaved: signOutConfirmed }).then((result) => {
+                if (result.ok) {
+                  router.push("/");
+                  return;
+                }
+                /*
+                 * The first refusal is usually "there are unsaved changes". Arming
+                 * the second press makes discarding them an explicit act rather
+                 * than a side effect of signing out.
+                 */
+                setSignOutConfirmed(true);
+                setAccessError(
+                  result.message ??
+                    "Signing out did not complete, so this device may still be signed in.",
+                );
+              });
+            }}
+            onDelete={() => setConfirmingDelete(true)}
+          />
+
           <div className="grid grid-cols-2 gap-2">
             <button
               className="flex min-h-12 min-w-0 items-center gap-2 rounded-field border border-line bg-white px-3 py-2 text-left text-text-muted transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-violet/30 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1380,6 +1543,26 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
 
         {!isFocused && runWorkspace}
       </div>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        title={`Delete ${event.name}?`}
+        body="The run of show, its audience link, and its controller credentials are removed for everyone. This cannot be undone."
+        confirmLabel="Delete event"
+        onConfirm={() => {
+          setConfirmingDelete(false);
+          setAccessError("");
+          void onDelete().then((result) => {
+            if (result.ok) router.push("/");
+            else
+              setAccessError(
+                result.message ??
+                  "The event was not deleted. Nothing has changed — try again when the connection is back.",
+              );
+          });
+        }}
+        onCancel={() => setConfirmingDelete(false)}
+      />
 
       <ConfirmDialog
         open={confirmingEnd}

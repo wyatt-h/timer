@@ -47,10 +47,8 @@ vi.mock("@/lib/store", () => ({
       },
       createdAt: 0,
     };
-    return {
-      workspace: { team: "demo", events: [event], updatedAt: 0 },
-      event,
-    };
+    // The hook reports the event and how the connection to it is doing.
+    return { event, connection: "live" as const };
   },
 }));
 

@@ -5,7 +5,7 @@ import { EventEditor } from "@/components/event-editor";
 import { makeEvent } from "@/lib/store";
 
 const navigation = vi.hoisted(() => ({
-  params: { team: "demo", eventId: undefined as string | undefined },
+  params: { eventId: undefined as string | undefined },
   push: vi.fn(),
 }));
 
@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
 describe("EventEditor", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    navigation.params = { team: "demo", eventId: undefined };
+    navigation.params = { eventId: undefined };
     navigation.push.mockClear();
   });
 
@@ -32,10 +32,12 @@ describe("EventEditor", () => {
   it("lets both Return to control buttons navigate without requiring a save", async () => {
     const event = makeEvent("Live event");
     event.status = "live";
-    navigation.params = { team: "demo", eventId: event.id };
+    navigation.params = { eventId: event.id };
+    // The offline cache for one event, which is what the controller hook paints
+    // from before the server answers.
     window.localStorage.setItem(
-      "aura:workspace:demo",
-      JSON.stringify({ team: "demo", events: [event], updatedAt: Date.now() }),
+      `aura:event:${event.id}`,
+      JSON.stringify({ event, version: 3, cachedAt: Date.now() }),
     );
 
     render(<EventEditor />);
@@ -44,10 +46,10 @@ describe("EventEditor", () => {
     expect(buttons).toHaveLength(2);
 
     fireEvent.click(buttons[0]);
-    expect(navigation.push).toHaveBeenLastCalledWith(`/t/demo/events/${event.id}`);
+    expect(navigation.push).toHaveBeenLastCalledWith(`/events/${event.id}`);
 
     navigation.push.mockClear();
     fireEvent.click(buttons[1]);
-    expect(navigation.push).toHaveBeenLastCalledWith(`/t/demo/events/${event.id}`);
+    expect(navigation.push).toHaveBeenLastCalledWith(`/events/${event.id}`);
   });
 });

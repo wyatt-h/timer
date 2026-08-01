@@ -53,8 +53,8 @@ const CONNECTION_LABEL: Record<ZoomEventConnection, string> = {
   connecting: "Connecting",
   "not-found": "Code not recognised",
   polling: "Connected",
-  live: "Connected · realtime",
-  unavailable: "Unavailable",
+  live: "Connected",
+  unavailable: "Reconnecting…",
 };
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -135,9 +135,9 @@ export function ZoomTimer() {
   });
 
   /*
-   * A dropped and re-established realtime channel means this app may have
-   * missed transitions, so the indicator is republished from authoritative
-   * state rather than trusted to still be correct.
+   * A gap in the poll means this app may have missed transitions, so the
+   * indicator is republished from authoritative state on the next good read
+   * rather than trusted to still be correct.
    */
   const previousConnection = useRef(connection);
   useEffect(() => {

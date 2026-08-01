@@ -9,9 +9,22 @@ import { AgendaEditor } from "@/components/agenda/agenda-editor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  CredentialsFields,
+  EMPTY_CREDENTIALS,
+  credentialsProblem,
+  type CredentialsDraft,
+} from "@/components/event-access/credentials-fields";
+import { ControllerSignInGate } from "@/components/event-access/controller-sign-in-gate";
+import { RecoveryCodePanel } from "@/components/event-access/recovery-code-panel";
+import { SaveStatusBadge } from "@/components/event-access/save-status-badge";
 import type { MaterialTextFieldElement } from "@/components/material-outlined-field";
 import { formatDuration } from "@/lib/format";
-import { makeEvent, useWorkspace } from "@/lib/store";
+import { makeEvent } from "@/lib/store";
+import { useControllerEvent } from "@/lib/controller/use-controller-event";
+import { createControllerEvent } from "@/lib/event-auth/client";
+import { rememberEvent } from "@/lib/event-auth/local-events";
+import { normalizeLoginName } from "@/lib/event-auth/login-name";
 import { agendaFormSchema, type AgendaFormValues } from "@/lib/agenda-schema";
 import { toAgendaItems, toFormValues } from "@/lib/agenda-mapping";
 import type { TimerEvent } from "@/lib/types";
@@ -23,13 +36,26 @@ function editorSnapshot(name: string, date: string, agenda: AgendaFormValues) {
 
 const EMPTY_AGENDA: AgendaFormValues = { agendaItems: [] };
 
+/*
+ * A new event is not saved anywhere until it has credentials, so the builder ends
+ * in two extra steps rather than one: choose the controller username and password
+ * that will own the event, then write down the recovery code that is shown once.
+ */
+type Stage = "editing" | "credentials" | "recovery";
+
 export function EventEditor() {
-  const params = useParams<{ team: string; eventId?: string }>();
+  const params = useParams<{ eventId?: string }>();
   const router = useRouter();
-  const team = params.team;
   const eventId = params.eventId;
-  const { workspace, update } = useWorkspace(team);
-  const existing = workspace?.events.find((event) => event.id === eventId);
+  const isEditing = Boolean(eventId);
+
+  /*
+   * One event, addressed by its own id. There is no workspace to load and no team
+   * to belong to; a builder with no id in the URL is simply working on a draft
+   * that does not exist on the server yet.
+   */
+  const controller = useControllerEvent(eventId ?? "");
+  const existing = isEditing ? controller.event : null;
 
   const [draft, setDraft] = useState<TimerEvent | null>(null);
   const [agenda, setAgenda] = useState<AgendaFormValues | null>(null);
@@ -37,18 +63,29 @@ export function EventEditor() {
   const [showErrors, setShowErrors] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
   const [saveNoticeVisible, setSaveNoticeVisible] = useState(false);
+  const [saveNoticeArmed, setSaveNoticeArmed] = useState(false);
+  const [stage, setStage] = useState<Stage>("editing");
+  const [credentials, setCredentials] = useState<CredentialsDraft>(EMPTY_CREDENTIALS);
+  const [credentialsTouched, setCredentialsTouched] = useState(false);
+  /** Whether the create step should also start the event once it exists. */
+  const [pendingStart, setPendingStart] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [created, setCreated] = useState<{
+    event: TimerEvent;
+    loginName: string;
+    recoveryCode: string;
+    start: boolean;
+  } | null>(null);
   const nameField = useRef<MaterialTextFieldElement>(null);
   const saveNoticeTimer = useRef<number | null>(null);
-  const isEditing = Boolean(eventId);
 
   useEffect(() => {
     if (eventId && (!existing || hydratedId === eventId)) return;
     if (!eventId && hydratedId === "new") return;
 
     queueMicrotask(() => {
-      const storedDraft = existing
-        ? structuredClone(existing)
-        : makeEvent("New event");
+      const storedDraft = existing ? structuredClone(existing) : makeEvent("New event");
       const storedAgenda = toFormValues(storedDraft.agenda);
       setDraft(storedDraft);
       setAgenda(storedAgenda);
@@ -76,18 +113,17 @@ export function EventEditor() {
     [agenda, draft],
   );
   const currentSnapshot = useMemo(
-    () => draft ? editorSnapshot(draft.name, draft.date, currentAgenda) : null,
+    () => (draft ? editorSnapshot(draft.name, draft.date, currentAgenda) : null),
     [draft, currentAgenda],
   );
   const hasUnsavedChanges =
-    savedSnapshot !== null &&
-    currentSnapshot !== null &&
-    currentSnapshot !== savedSnapshot;
+    savedSnapshot !== null && currentSnapshot !== null && currentSnapshot !== savedSnapshot;
 
   const nameError = draft?.name.trim() ? "" : "Give the event a name before saving.";
   const agendaResult = agendaFormSchema.safeParse(currentAgenda);
 
   function hideSaveNotice() {
+    setSaveNoticeArmed(false);
     setSaveNoticeVisible(false);
     if (saveNoticeTimer.current !== null) {
       window.clearTimeout(saveNoticeTimer.current);
@@ -95,27 +131,42 @@ export function EventEditor() {
     }
   }
 
+  /*
+   * Arms the confirmation rather than showing it. "Changes saved" is a claim
+   * about the cloud, so it waits for the save coordinator to report that the
+   * durable write actually landed.
+   */
   function showSaveNotice() {
-    setSaveNoticeVisible(true);
-    if (saveNoticeTimer.current !== null) {
-      window.clearTimeout(saveNoticeTimer.current);
-    }
-    saveNoticeTimer.current = window.setTimeout(() => {
-      setSaveNoticeVisible(false);
-      saveNoticeTimer.current = null;
-    }, 3200);
+    setSaveNoticeArmed(true);
   }
 
-  function save(start = false) {
-    if (!draft) return;
+  useEffect(() => {
+    if (!saveNoticeArmed || controller.saveState !== "saved") return;
+    queueMicrotask(() => {
+      setSaveNoticeArmed(false);
+      setSaveNoticeVisible(true);
+      if (saveNoticeTimer.current !== null) window.clearTimeout(saveNoticeTimer.current);
+      saveNoticeTimer.current = window.setTimeout(() => {
+        setSaveNoticeVisible(false);
+        saveNoticeTimer.current = null;
+      }, 3200);
+    });
+  }, [saveNoticeArmed, controller.saveState]);
+
+  /**
+   * The event as the editor's fields currently describe it. Shared by the save
+   * path and the create path so the two cannot drift.
+   */
+  function buildNext(start: boolean): TimerEvent | null {
+    if (!draft) return null;
     if (nameError) {
       setShowErrors(true);
       nameField.current?.focus();
-      return;
+      return null;
     }
     if (!agendaResult.success) {
       setShowErrors(true);
-      return;
+      return null;
     }
 
     const nextAgenda = toAgendaItems(currentAgenda, draft.agenda);
@@ -126,7 +177,7 @@ export function EventEditor() {
         : first.durationSeconds;
     const shouldResetRuntime = !existing || (start && draft.status !== "live");
 
-    const next: TimerEvent = {
+    return {
       ...draft,
       name: draft.name.trim(),
       agenda: nextAgenda,
@@ -145,26 +196,43 @@ export function EventEditor() {
           }
         : draft.runtime,
     };
+  }
 
-    update((current) => ({
-      ...current,
-      events: isEditing
-        ? current.events.map((event) => (event.id === next.id ? next : event))
-        : [next, ...current.events],
-    }));
-
-    const savedAgenda = toFormValues(nextAgenda);
+  function adoptSaved(next: TimerEvent) {
+    const savedAgenda = toFormValues(next.agenda);
     setDraft(next);
     setAgenda(savedAgenda);
     setSavedSnapshot(editorSnapshot(next.name, next.date, savedAgenda));
     setShowErrors(false);
+  }
 
-    if (!start && isEditing) {
+  function save(start = false) {
+    const next = buildNext(start);
+    if (!next) return;
+
+    /*
+     * A brand new event has nowhere to be saved yet. It needs the controller
+     * credentials that will own it, so the builder hands over to that step rather
+     * than writing an event only this browser would ever be able to see.
+     */
+    if (!isEditing) {
+      setPendingStart(start);
+      setStage("credentials");
+      setCreated(null);
+      setCreateError("");
+      setCredentialsTouched(false);
+      return;
+    }
+
+    controller.update(() => next);
+    adoptSaved(next);
+
+    if (!start) {
       showSaveNotice();
       return;
     }
 
-    router.push(start ? `/t/${team}/events/${next.id}` : `/t/${team}`);
+    router.push(`/events/${next.id}`);
   }
 
   function handlePrimaryAction() {
@@ -176,11 +244,54 @@ export function EventEditor() {
      * buttons; Save changes remains the explicit way to persist editor data.
      */
     if (draft.status === "live") {
-      router.push(`/t/${team}/events/${draft.id}`);
+      router.push(`/events/${draft.id}`);
       return;
     }
 
     save(true);
+  }
+
+  /** Creates the event, its credentials, its session and its recovery code at once. */
+  async function createEvent(start: boolean) {
+    const next = buildNext(start);
+    if (!next) return;
+
+    setCredentialsTouched(true);
+    const problem = credentialsProblem(credentials);
+    if (problem) {
+      setCreateError(problem);
+      return;
+    }
+
+    setCreating(true);
+    setCreateError("");
+    const result = await createControllerEvent({
+      loginName: normalizeLoginName(credentials.loginName),
+      password: credentials.password,
+      event: next,
+    });
+    setCreating(false);
+
+    if (!result.ok) {
+      setCreateError(result.message);
+      return;
+    }
+
+    rememberEvent({
+      eventId: result.data.event.id,
+      name: result.data.event.name,
+      loginName: result.data.loginName,
+    });
+    // The credentials leave memory the moment they are no longer needed.
+    setCredentials(EMPTY_CREDENTIALS);
+    adoptSaved(result.data.event);
+    setCreated({
+      event: result.data.event,
+      loginName: result.data.loginName,
+      recoveryCode: result.data.recoveryCode,
+      start,
+    });
+    setStage("recovery");
   }
 
   const programmeSeconds = currentAgenda.agendaItems.reduce(
@@ -189,14 +300,120 @@ export function EventEditor() {
   );
 
   /*
+   * The credential and recovery steps replace the builder rather than floating
+   * over it. Both are decisions that cannot be half-made: an event with no
+   * credentials does not exist yet, and a recovery code that has not been written
+   * down cannot be shown again.
+   */
+  if (stage !== "editing" && draft) {
+    return (
+      <main className="min-h-svh bg-paper" id="main">
+        <AppHeader />
+        <div className="mx-auto w-[min(560px,calc(100%-2.5rem))] pt-12 pb-24">
+          {stage === "recovery" && created ? (
+            <RecoveryCodePanel
+              code={created.recoveryCode}
+              eventName={created.event.name}
+              loginName={created.loginName}
+              continueLabel={created.start ? "Open the control room" : "Go home"}
+              onContinue={() => router.push(created.start ? `/events/${created.event.id}` : "/")}
+            />
+          ) : (
+            <Card className="grid gap-5 p-5">
+              <div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-3"
+                  onClick={() => setStage("editing")}
+                  disabled={creating}
+                >
+                  <ArrowLeft size={15} aria-hidden />
+                  Back to the run of show
+                </Button>
+                <h1 className="mt-3 text-[24px] font-semibold tracking-[-0.04em]">
+                  Who controls {draft.name.trim() || "this event"}?
+                </h1>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">
+                  These credentials belong to this event alone. Enter them on any other device to
+                  run the same event from there.
+                </p>
+              </div>
+
+              <CredentialsFields
+                draft={credentials}
+                onChange={setCredentials}
+                showErrors={credentialsTouched}
+                disabled={creating}
+              />
+
+              <div aria-live="polite">
+                {createError && (
+                  <p className="flex items-center gap-1.5 text-[12px] font-medium text-over">
+                    <AlertCircle size={12} aria-hidden />
+                    {createError}
+                  </p>
+                )}
+              </div>
+
+              <Button
+                variant="primary"
+                disabled={creating}
+                onClick={() => void createEvent(pendingStart)}
+              >
+                {creating
+                  ? "Creating the event…"
+                  : pendingStart
+                    ? "Create and start the event"
+                    : "Create the event"}
+              </Button>
+            </Card>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  /*
    * The editor's generated ids must never be created during server rendering:
    * the server and browser would produce different UUIDs, which would also
    * change field ids and dnd-kit's accessibility attributes during hydration.
    */
   if (!draft || !agenda) {
+    /*
+     * Nothing to edit, and no session that could open it. The same screen for an
+     * event that was deleted, one belonging to somebody else, and an id somebody
+     * guessed — the address bar is not a way to discover events.
+     */
+    if (isEditing && controller.status === "authorization-required") {
+      return (
+        <ControllerSignInGate
+          eventId={eventId ?? ""}
+          hasUnsavedWork={controller.hasUnsavedWork()}
+          onResumed={() => void controller.resumeAfterSignIn()}
+        />
+      );
+    }
+    if (isEditing && controller.status === "not-found") {
+      return (
+        <main className="grid min-h-svh place-items-center p-8 text-center text-text-muted" id="main">
+          <div>
+            <h1 className="mb-2.5 text-[26px] font-semibold tracking-[-0.04em] text-ink">
+              We couldn&apos;t find that event
+            </h1>
+            <p className="mb-5 text-[13px]">
+              Sign in with the event&apos;s controller username and password to open it.
+            </p>
+            <Button variant="primary" onClick={() => router.push("/")}>
+              Open an event
+            </Button>
+          </div>
+        </main>
+      );
+    }
     return (
       <main className="min-h-svh bg-paper" id="main">
-        <AppHeader team={team} />
+        <AppHeader />
         <div
           className="mx-auto grid w-[min(1040px,calc(100%-2.5rem))] gap-5 pt-9"
           aria-busy="true"
@@ -214,19 +431,14 @@ export function EventEditor() {
 
   return (
     <main className="min-h-svh bg-paper" id="main">
-      <AppHeader team={team} />
+      <AppHeader />
 
       <div className="mx-auto w-[min(1040px,calc(100%-2.5rem))] pt-9 pb-24">
         <div className="mb-8 flex flex-wrap items-start justify-between gap-5">
           <div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="-ml-3"
-              onClick={() => router.push(`/t/${team}`)}
-            >
+            <Button variant="ghost" size="sm" className="-ml-3" onClick={() => router.push("/")}>
               <ArrowLeft size={15} aria-hidden />
-              Back to events
+              Home
             </Button>
             <h1 className="mt-4 text-[clamp(2rem,4vw,2.6rem)] leading-tight font-semibold tracking-[-0.05em]">
               {isEditing ? "Edit event" : "New event"}
@@ -235,6 +447,9 @@ export function EventEditor() {
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="flex items-center gap-2">
+              {isEditing && (
+                <SaveStatusBadge state={controller.saveState} onRetry={controller.retrySave} />
+              )}
               {hasUnsavedChanges && (
                 <span
                   role="status"
@@ -245,7 +460,7 @@ export function EventEditor() {
                 </span>
               )}
               <Button variant="secondary" onClick={() => save(false)}>
-                Save changes
+                {isEditing ? "Save changes" : "Save event"}
               </Button>
             </div>
             <Button variant="primary" onClick={handlePrimaryAction}>
@@ -262,9 +477,7 @@ export function EventEditor() {
             */}
           <aside className="lg:sticky lg:top-24 lg:col-start-2 lg:row-start-1">
             <Card className="p-5">
-              <h2 className="text-[18px] font-semibold tracking-[-0.025em]">
-                Event details
-              </h2>
+              <h2 className="text-[18px] font-semibold tracking-[-0.025em]">Event details</h2>
 
               <div className="mt-4 grid gap-4">
                 <div className="min-w-0">
@@ -305,13 +518,8 @@ export function EventEditor() {
               </div>
 
               <div className="mt-5 border-t border-line-soft pt-4">
-                <h3 className="text-[13px] font-semibold text-text-muted">
-                  Programme summary
-                </h3>
-                <dl
-                  className="mt-3 grid grid-cols-2 gap-2"
-                  aria-live="polite"
-                >
+                <h3 className="text-[13px] font-semibold text-text-muted">Programme summary</h3>
+                <dl className="mt-3 grid grid-cols-2 gap-2" aria-live="polite">
                   <div className="rounded-control bg-surface-sunken px-3 py-2.5">
                     <dt className="text-[12px] text-text-subtle">Agenda items</dt>
                     <dd className="tabular mt-1 text-[18px] font-semibold tracking-[-0.03em]">
@@ -359,9 +567,7 @@ export function EventEditor() {
         className={cn(
           "pointer-events-none fixed right-5 bottom-5 z-50 flex max-w-[calc(100%-2.5rem)] items-center gap-2.5 rounded-card border border-success/20 bg-white px-4 py-3 text-[13px] font-semibold text-ink shadow-[0_16px_40px_rgba(20,16,38,0.16)]",
           "transition-[opacity,transform] duration-300 ease-[var(--ease-out-quart)]",
-          saveNoticeVisible
-            ? "translate-y-0 opacity-100"
-            : "translate-y-2 opacity-0",
+          saveNoticeVisible ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0",
         )}
       >
         {saveNoticeVisible && (

@@ -61,8 +61,7 @@ const CHIME_STORAGE_KEY = "timer:audience-chime";
 
 export function AudienceDisplay() {
   const params = useParams<{ token: string }>();
-  const result = usePublicEvent(params.token);
-  const event = result?.event;
+  const { event, connection } = usePublicEvent(params.token);
   const segments = useMemo(() => (event ? flattenSegments(event) : []), [event]);
   const runtime = event?.runtime;
   const [remaining, setRemaining] = useState(runtime?.remainingSeconds ?? 0);
@@ -231,7 +230,7 @@ export function AudienceDisplay() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [toggleFullscreen]);
 
-  if (!result || !event || !runtime || !segments.length) {
+  if (!event || !runtime || !segments.length) {
     return (
       <main
         className="relative flex min-h-svh flex-col overflow-hidden p-[clamp(1.375rem,4vw,3.5rem)] text-[#f8f7fc]"
@@ -299,6 +298,19 @@ export function AudienceDisplay() {
 
       <header className="relative z-2 flex items-center justify-between text-[12px] text-[#8f8e99]">
         <BrandMark light />
+        {/*
+          * The poll failed, so nothing is known. The timer stays on screen — it is
+          * still recomputed from `endsAt` and remains correct — but the room is told
+          * the link is down rather than being left to trust a frozen number.
+          */}
+        {connection === "unavailable" && (
+          <span
+            role="status"
+            className="rounded-full bg-[rgba(214,69,69,0.22)] px-2.5 py-1 text-[12px] font-semibold text-[#ffb4b4]"
+          >
+            Reconnecting…
+          </span>
+        )}
         <div className="flex flex-wrap items-center justify-end gap-2">
           {/*
             * Browsers block audio until the page has been interacted with, so
