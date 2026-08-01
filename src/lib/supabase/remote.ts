@@ -38,6 +38,7 @@ type DbEvent = {
   event_date: string;
   status: "draft" | "live" | "completed";
   viewer_token: string;
+  zoom_token: string | null;
   created_at: string;
   agenda_items: DbAgenda[];
   event_runtime: DbRuntime | DbRuntime[] | null;
@@ -74,6 +75,7 @@ function mapEvent(row: DbEvent): TimerEvent {
     date: row.event_date,
     status: row.status,
     viewerToken: row.viewer_token,
+    zoomToken: row.zoom_token ?? undefined,
     createdAt: new Date(row.created_at).getTime(),
     agenda: [...(row.agenda_items ?? [])]
       .sort((a, b) => a.order_index - b.order_index)
@@ -121,7 +123,7 @@ export async function pullWorkspace(client: SupabaseClient, team: string): Promi
   const { data, error } = await client
     .from("events")
     .select(
-      "id, name, event_date, status, viewer_token, created_at, agenda_items(id, kind, duration_seconds, speaker_default_seconds, host, sound_muted, order_index, speakers(id, name, duration_seconds, sound_muted, order_index)), event_runtime(status, segment_index, remaining_seconds, ends_at, panel_status, panel_remaining_seconds, panel_ends_at, sound_enabled, updated_at)",
+      "id, name, event_date, status, viewer_token, zoom_token, created_at, agenda_items(id, kind, duration_seconds, speaker_default_seconds, host, sound_muted, order_index, speakers(id, name, duration_seconds, sound_muted, order_index)), event_runtime(status, segment_index, remaining_seconds, ends_at, panel_status, panel_remaining_seconds, panel_ends_at, sound_enabled, updated_at)",
     )
     .eq("team_id", teamRow.id)
     .order("created_at", { ascending: false });
@@ -166,6 +168,7 @@ export async function pushWorkspace(client: SupabaseClient, workspace: Workspace
       event_date: event.date,
       status: event.status,
       viewer_token: event.viewerToken,
+      zoom_token: event.zoomToken ?? null,
       created_by: user.id,
     });
     if (eventResult.error) throw eventResult.error;
@@ -238,12 +241,12 @@ export async function pushWorkspace(client: SupabaseClient, workspace: Workspace
   }
 }
 
-export async function pullPublicEvent(
-  client: SupabaseClient,
-  token: string,
-): Promise<{ workspace: Workspace; event: TimerEvent } | null> {
-  const { data, error } = await client.rpc("get_public_event", { p_token: token });
-  if (error || !data) return null;
+/**
+ * Both public lookups return the same payload from the same database function,
+ * so they share one mapper: timestamps arrive as ISO strings and become the
+ * epoch milliseconds the rest of the application works in.
+ */
+function mapPublicPayload(data: unknown): { workspace: Workspace; event: TimerEvent } {
   const payload = data as {
     team: string;
     event: TimerEvent & {
@@ -271,6 +274,28 @@ export async function pullPublicEvent(
     workspace: { team: payload.team, events: [event], updatedAt: Date.now() },
     event,
   };
+}
+
+export async function pullPublicEvent(
+  client: SupabaseClient,
+  token: string,
+): Promise<{ workspace: Workspace; event: TimerEvent } | null> {
+  const { data, error } = await client.rpc("get_public_event", { p_token: token });
+  if (error || !data) return null;
+  return mapPublicPayload(data);
+}
+
+/**
+ * The same read, addressed by an event's Zoom pairing code. Read-only and
+ * anonymous, exactly like the audience lookup — the Zoom App never writes.
+ */
+export async function pullZoomEvent(
+  client: SupabaseClient,
+  zoomToken: string,
+): Promise<{ workspace: Workspace; event: TimerEvent } | null> {
+  const { data, error } = await client.rpc("get_zoom_event", { p_token: zoomToken });
+  if (error || !data) return null;
+  return mapPublicPayload(data);
 }
 
 export async function broadcastWorkspace(client: SupabaseClient, workspace: Workspace) {

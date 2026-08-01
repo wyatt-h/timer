@@ -8,6 +8,7 @@ import {
   broadcastWorkspace,
   pullPublicEvent,
   pullWorkspace,
+  pullZoomEvent,
   pushWorkspace,
 } from "@/lib/supabase/remote";
 
@@ -150,13 +151,26 @@ export function persistWorkspace(workspace: Workspace) {
 }
 
 export function findEventByToken(token: string): { workspace: Workspace; event: TimerEvent } | null {
+  return findEventBy((event) => event.viewerToken === token);
+}
+
+/** Local-mode counterpart of the Zoom pairing-code lookup. */
+export function findEventByZoomToken(
+  zoomToken: string,
+): { workspace: Workspace; event: TimerEvent } | null {
+  return findEventBy((event) => event.zoomToken === zoomToken);
+}
+
+function findEventBy(
+  matches: (event: TimerEvent) => boolean,
+): { workspace: Workspace; event: TimerEvent } | null {
   if (typeof window === "undefined") return null;
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = window.localStorage.key(index);
     if (!key?.startsWith(STORAGE_PREFIX)) continue;
     try {
       const workspace = JSON.parse(window.localStorage.getItem(key) ?? "") as Workspace;
-      const event = workspace.events.find((candidate) => candidate.viewerToken === token);
+      const event = workspace.events.find(matches);
       if (event) return { workspace, event };
     } catch {
       // Ignore unrelated or malformed local data.
@@ -278,4 +292,120 @@ export function usePublicEvent(token: string) {
   }, [refresh, token]);
 
   return result;
+}
+
+export type ZoomEventConnection =
+  | "idle"
+  | "connecting"
+  | "not-found"
+  | "polling"
+  | "live"
+  | "unavailable";
+
+/**
+ * The Zoom App's read path: an event addressed by its pairing code rather than
+ * by an audience token. It is deliberately a sibling of `usePublicEvent` rather
+ * than a generalisation of it — the audience display is the one screen that must
+ * never regress, and the realtime channel here can only be joined after the
+ * first lookup resolves the event's viewer token.
+ *
+ * Read-only throughout. Supabase stays the authoritative timer.
+ */
+export function useZoomEvent(zoomToken: string) {
+  const [result, setResult] = useState<ReturnType<typeof findEventByZoomToken>>(null);
+  const [connection, setConnection] = useState<ZoomEventConnection>("idle");
+
+  useEffect(() => {
+    let active = true;
+
+    /*
+     * State is set from a microtask rather than straight from the effect body,
+     * which is how the rest of this module keeps a subscription's first paint
+     * out of the render that created it.
+     */
+    if (!zoomToken) {
+      queueMicrotask(() => {
+        if (!active) return;
+        setResult(null);
+        setConnection("idle");
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    const local = findEventByZoomToken(zoomToken);
+    const client = isSupabaseConfigured() ? createSupabaseBrowserClient() : null;
+
+    queueMicrotask(() => {
+      if (!active) return;
+      if (local) setResult(local);
+      setConnection(client ? "connecting" : local ? "polling" : "unavailable");
+    });
+
+    if (!client) {
+      return () => {
+        active = false;
+      };
+    }
+
+    const pull = async () => {
+      const cloudResult = await pullZoomEvent(client, zoomToken);
+      if (!active) return;
+      if (cloudResult) {
+        setResult(cloudResult);
+        // A live realtime channel upgrades this to "live" on its own.
+        setConnection((current) => (current === "live" ? current : "polling"));
+      } else {
+        setConnection((current) => (current === "connecting" ? "not-found" : current));
+      }
+    };
+
+    void pull();
+    const interval = window.setInterval(() => void pull(), 1000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [zoomToken]);
+
+  /*
+   * The audience broadcast carries the whole event on every control-room write,
+   * so the Zoom App rides along on the channel the audience displays already
+   * use. It can only be joined once a lookup has told us the viewer token.
+   */
+  const viewerToken = result?.event.viewerToken;
+  const team = result?.workspace.team;
+
+  useEffect(() => {
+    if (!zoomToken || !viewerToken || !isSupabaseConfigured()) return;
+    const client = createSupabaseBrowserClient();
+    if (!client) return;
+
+    const channel: RealtimeChannel = client
+      .channel(`event:${viewerToken}`)
+      .on("broadcast", { event: "state" }, ({ payload }) => {
+        if (!payload?.event) return;
+        const event = payload.event as TimerEvent;
+        if (event.zoomToken && event.zoomToken !== zoomToken) return;
+        setResult({
+          workspace: {
+            team: payload.team ?? team ?? "",
+            events: [event],
+            updatedAt: Date.now(),
+          },
+          event,
+        });
+      })
+      .subscribe((status) => {
+        setConnection(status === "SUBSCRIBED" ? "live" : "polling");
+      });
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [team, viewerToken, zoomToken]);
+
+  return { result, event: result?.event ?? null, connection };
 }

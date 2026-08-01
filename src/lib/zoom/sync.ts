@@ -1,0 +1,276 @@
+import { flattenSegments } from "@/lib/format";
+import type { TimerEvent } from "@/lib/types";
+
+/*
+ * Pure translation from this application's authoritative timer state into Zoom
+ * Dynamic Indicator commands. Nothing here touches React, Supabase, or the Zoom
+ * SDK, so every transition below is unit-testable in isolation.
+ *
+ * Zoom leaves several runtime semantics undocumented, so the rules are
+ * deliberately conservative:
+ *
+ * - `pause` and `resume` are only used for a straight transition where Zoom's
+ *   own countdown should already hold the right value. Anything else — a time
+ *   adjustment, a reset, a new speaker, a refresh, a reconnect — is republished
+ *   as a complete fresh `start`, because a new value cannot be attached to a
+ *   resume (`DynamicIndicatorOptions.timer` has no `current` field).
+ * - `extendDynamicIndicator` is reserved for an explicit positive extension of
+ *   an already-synchronized countdown.
+ * - Removal is always `removeDynamicIndicator()`. The visual behaviour of
+ *   `timer.action: "end"` is undocumented, so it is not used.
+ */
+
+/** How far Zoom's projected countdown may drift before it is republished. */
+export const DRIFT_TOLERANCE_SECONDS = 2;
+
+/** Below this, a difference is drift rather than an operator's adjustment. */
+export const EXTEND_THRESHOLD_SECONDS = 2;
+
+/** Nothing is worth publishing to a meeting below this. */
+const MINIMUM_PUBLISHABLE_SECONDS = 1;
+
+/** Indicator text sits beside a participant's name, so it stays short. */
+const MAX_LABEL_LENGTH = 30;
+
+export type TimerPhase = "idle" | "running" | "paused" | "finished";
+
+/**
+ * The authoritative timer, flattened to the one clock Zoom can show. Remaining
+ * time is signed: this application deliberately counts past zero, and keeping
+ * the sign means an overrunning countdown stays in step with Zoom's instead of
+ * looking like a large positive extension.
+ */
+export type SourceTimer = {
+  /** Identifies the clock itself, so a new speaker is not mistaken for drift. */
+  segmentId: string;
+  label: string;
+  phase: TimerPhase;
+  remainingSeconds: number;
+  /** `RuntimeState.updatedAt`; advances on every control-room write. */
+  revision: number;
+};
+
+/** What this app last successfully told Zoom, and when. */
+export type PublishedTimer = {
+  segmentId: string;
+  label: string;
+  phase: "running" | "paused";
+  remainingSeconds: number;
+  /** Local clock reading when the command was acknowledged. */
+  at: number;
+  revision: number;
+};
+
+export type ZoomTimerCommand =
+  | { kind: "start"; remainingSeconds: number; label: string }
+  | { kind: "pause" }
+  | { kind: "resume" }
+  | { kind: "extend"; seconds: number }
+  | { kind: "remove" }
+  | { kind: "noop" };
+
+export type ZoomTimerPlan = {
+  command: ZoomTimerCommand;
+  /** What `published` becomes once the command is acknowledged. */
+  published: PublishedTimer | null;
+};
+
+/**
+ * Zoom documents `timer.start` and `extendDuration` as plain numbers without
+ * stating a unit. Seconds are the practical expectation and are treated as such
+ * here; this is the single place where the assumption is applied, so a live test
+ * that proves otherwise is a one-function change.
+ */
+export function toZoomTimerUnits(seconds: number) {
+  return Math.max(0, Math.ceil(seconds));
+}
+
+function shortLabel(label: string) {
+  const trimmed = label.trim() || "Speaker";
+  return trimmed.length > MAX_LABEL_LENGTH
+    ? `${trimmed.slice(0, MAX_LABEL_LENGTH - 1).trimEnd()}…`
+    : trimmed;
+}
+
+/** Remaining time on a running clock, derived from its authoritative deadline. */
+export function remainingFromDeadline(endsAt: number, now: number) {
+  return (endsAt - now) / 1000;
+}
+
+/**
+ * Reduce an event to the single countdown Zoom can display: the current
+ * speaker's clock, which is the number the room reacts to. A panel's overall
+ * total stays in this application's own displays.
+ */
+export function sourceTimerFromEvent(event: TimerEvent, now: number): SourceTimer | null {
+  const segments = flattenSegments(event);
+  if (!segments.length) return null;
+
+  const runtime = event.runtime;
+  const index = Math.min(Math.max(0, runtime.segmentIndex), segments.length - 1);
+  const segment = segments[index];
+
+  const phase: TimerPhase =
+    event.status === "completed" || runtime.status === "ended"
+      ? "finished"
+      : runtime.status === "running"
+        ? "running"
+        : runtime.status === "paused"
+          ? "paused"
+          : "idle";
+
+  const remainingSeconds =
+    runtime.status === "running" && runtime.endsAt
+      ? remainingFromDeadline(runtime.endsAt, now)
+      : runtime.remainingSeconds;
+
+  return {
+    segmentId: segment.id,
+    label: shortLabel(segment.speaker),
+    phase,
+    remainingSeconds,
+    revision: runtime.updatedAt,
+  };
+}
+
+/** Where Zoom's countdown should have reached by now, if it is still running. */
+function projectPublished(published: PublishedTimer, now: number) {
+  if (published.phase !== "running") return published.remainingSeconds;
+  return published.remainingSeconds - (now - published.at) / 1000;
+}
+
+function startCommand(source: SourceTimer, now: number): ZoomTimerPlan {
+  if (source.remainingSeconds < MINIMUM_PUBLISHABLE_SECONDS) {
+    return { command: { kind: "noop" }, published: null };
+  }
+  return {
+    command: {
+      kind: "start",
+      remainingSeconds: source.remainingSeconds,
+      label: source.label,
+    },
+    published: {
+      segmentId: source.segmentId,
+      label: source.label,
+      phase: "running",
+      remainingSeconds: source.remainingSeconds,
+      at: now,
+      revision: source.revision,
+    },
+  };
+}
+
+function removal(published: PublishedTimer | null): ZoomTimerPlan {
+  return {
+    command: published ? { kind: "remove" } : { kind: "noop" },
+    published: null,
+  };
+}
+
+/**
+ * Decide the single command that moves Zoom from what it was last told to what
+ * the authoritative timer now says. Identical input yields `noop`, which is what
+ * makes repeated Supabase events and React rerenders harmless.
+ */
+export function planZoomCommand({
+  source,
+  published,
+  enabled,
+  now,
+  canExtend = true,
+}: {
+  source: SourceTimer | null;
+  published: PublishedTimer | null;
+  enabled: boolean;
+  now: number;
+  /** Clients without `extendDynamicIndicator` republish the whole timer. */
+  canExtend?: boolean;
+}): ZoomTimerPlan {
+  // Publishing is opt-in, so losing the source or switching sync off retracts
+  // whatever the meeting is currently being shown.
+  if (!enabled || !source) return removal(published);
+
+  if (source.phase === "idle" || source.phase === "finished") return removal(published);
+
+  if (source.phase === "paused") {
+    if (!published) {
+      // A paused clock cannot be published as paused — it would have to be
+      // started first, which would show the meeting time draining while nobody
+      // is speaking. It publishes when the operator starts the timer.
+      return { command: { kind: "noop" }, published: null };
+    }
+    if (published.segmentId !== source.segmentId) return removal(published);
+    if (published.phase === "paused") {
+      /*
+       * Zoom is already paused. An adjustment made while paused cannot be
+       * corrected here, because the only way to change the value is a fresh
+       * `start`, which would begin counting. The correction is applied by the
+       * resume branch below when the operator starts again.
+       */
+      return { command: { kind: "noop" }, published };
+    }
+    return {
+      command: { kind: "pause" },
+      published: {
+        ...published,
+        phase: "paused",
+        remainingSeconds: source.remainingSeconds,
+        at: now,
+        revision: source.revision,
+      },
+    };
+  }
+
+  // Running from here down.
+  if (!published) return startCommand(source, now);
+  if (published.segmentId !== source.segmentId) return startCommand(source, now);
+  if (published.label !== source.label) return startCommand(source, now);
+
+  if (published.phase === "paused") {
+    const drift = source.remainingSeconds - published.remainingSeconds;
+    if (Math.abs(drift) > DRIFT_TOLERANCE_SECONDS) return startCommand(source, now);
+    return {
+      command: { kind: "resume" },
+      published: {
+        ...published,
+        phase: "running",
+        remainingSeconds: source.remainingSeconds,
+        at: now,
+        revision: source.revision,
+      },
+    };
+  }
+
+  const difference = source.remainingSeconds - projectPublished(published, now);
+
+  if (difference < -DRIFT_TOLERANCE_SECONDS) {
+    // Time was removed, or Zoom's countdown has run ahead of ours.
+    return startCommand(source, now);
+  }
+
+  if (difference >= EXTEND_THRESHOLD_SECONDS) {
+    /*
+     * Time was added. A repeated delivery of the same revision must not extend
+     * twice, so an unchanged revision is treated as an echo rather than a
+     * second adjustment.
+     */
+    if (source.revision === published.revision) {
+      return { command: { kind: "noop" }, published };
+    }
+    if (!canExtend) return startCommand(source, now);
+    const seconds = Math.round(difference);
+    return {
+      command: { kind: "extend", seconds },
+      published: {
+        ...published,
+        remainingSeconds: projectPublished(published, now) + seconds,
+        at: now,
+        revision: source.revision,
+      },
+    };
+  }
+
+  // In step: the common case, and the reason a one-second tick is not a
+  // one-second stream of SDK calls.
+  return { command: { kind: "noop" }, published };
+}

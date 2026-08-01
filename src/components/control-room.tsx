@@ -25,6 +25,7 @@ import {
   Trash2,
   UserRound,
   UsersRound,
+  Video,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -56,6 +57,7 @@ import {
 } from "@/lib/format";
 import { makeAgendaItem, useWorkspace } from "@/lib/store";
 import { useShortcuts, useThrottledAnnouncement } from "@/lib/use-shortcuts";
+import { formatZoomToken, makeZoomToken } from "@/lib/zoom/token";
 import type { AgendaItem, TimerEvent, RuntimeState, Speaker, TimerSegment } from "@/lib/types";
 
 /** Countdowns keep running past zero, so nothing here is clamped. */
@@ -274,6 +276,7 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
     runtime.panelRemainingSeconds ?? 0,
   );
   const [copied, setCopied] = useState(false);
+  const [zoomCopied, setZoomCopied] = useState(false);
   const [confirmingEnd, setConfirmingEnd] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [projectedFinish, setProjectedFinish] = useState<number | null>(null);
@@ -570,6 +573,26 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
     await navigator.clipboard.writeText(`${window.location.origin}${viewerPath}`);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2400);
+  }
+
+  /*
+   * The Zoom App runs in a webview that does not necessarily carry this
+   * browser's session, so an event is paired by a short code rather than by
+   * signing in again. It is minted on demand: an event that never goes near
+   * Zoom never gets one.
+   */
+  function createZoomCode() {
+    mutateEvent((currentEvent) => ({
+      ...currentEvent,
+      zoomToken: currentEvent.zoomToken ?? makeZoomToken(),
+    }));
+  }
+
+  async function copyZoomCode() {
+    if (!event.zoomToken) return;
+    await navigator.clipboard.writeText(event.zoomToken);
+    setZoomCopied(true);
+    window.setTimeout(() => setZoomCopied(false), 2400);
   }
 
   useShortcuts(
@@ -1239,6 +1262,50 @@ function LiveConsole({ team, event, segments, update }: LiveConsoleProps) {
             <small className="text-[12px] text-text-subtle">
               {formatDuration(Math.max(0, remainingProgramSeconds))} of programme left
             </small>
+          </div>
+
+          {/*
+            * Pairing code for the Zoom App. Copied here, pasted into the app's
+            * panel inside a meeting, where it publishes this event's speaker
+            * countdown to every participant.
+            */}
+          <div className="grid gap-2 rounded-field border border-line bg-surface-raised px-3.5 py-3">
+            <span className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
+              <Video size={12} aria-hidden />
+              Zoom code
+            </span>
+            {event.zoomToken ? (
+              <div className="flex items-center justify-between gap-2">
+                <strong className="tabular font-mono text-[15px] font-semibold tracking-[0.06em] text-ink">
+                  {formatZoomToken(event.zoomToken)}
+                </strong>
+                <button
+                  className="grid size-9 shrink-0 place-items-center rounded-[9px] border border-line bg-white text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark"
+                  onClick={copyZoomCode}
+                  aria-label="Copy the Zoom code for this event"
+                  title="Copy Zoom code"
+                >
+                  {zoomCopied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-[12px] text-text-subtle">
+                  Paste this into the Timer app inside a Zoom meeting to show the countdown to
+                  every participant.
+                </p>
+                <button
+                  className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-control border border-line bg-white px-3 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover"
+                  onClick={createZoomCode}
+                >
+                  <Plus size={13} aria-hidden />
+                  Create Zoom code
+                </button>
+              </>
+            )}
+            <p className="sr-only" role="status" aria-live="polite">
+              {zoomCopied ? "Zoom code copied to clipboard" : ""}
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-2">

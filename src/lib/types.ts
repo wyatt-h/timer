@@ -49,6 +49,12 @@ export interface TimerEvent {
   date: string;
   status: EventStatus;
   viewerToken: string;
+  /**
+   * Pairing code for the Zoom App, created on demand from the control room.
+   * Absent until an operator asks for one, so no event carries a code it has
+   * never needed.
+   */
+  zoomToken?: string;
   agenda: AgendaItem[];
   runtime: RuntimeState;
   createdAt: number;
