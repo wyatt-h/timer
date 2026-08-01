@@ -18,11 +18,11 @@ import { SESSION_TTL_SECONDS, prepareEventSession } from "@/lib/server/session";
  * session are written by one transactional database function, so a half-created
  * event cannot exist.
  *
- * The event name itself is the sign-in identifier; no separate username or
- * recovery credential is created.
+ * The lowercase login name is separate from the event's display name.
  */
 
 const bodySchema = z.object({
+  loginName: z.string().min(1).max(200),
   password: z.string().min(1).max(512),
   event: eventPayloadSchema,
 });
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     const parsed = bodySchema.safeParse(await readJsonBody(request));
     if (!parsed.success) throw new EventAuthError("invalid_request");
 
-    const loginName = normalizeLoginName(parsed.data.event.name);
+    const loginName = normalizeLoginName(parsed.data.loginName);
     // Both rules are also CHECK constraints, so this is the useful 400 rather
     // than the only line of defence.
     if (!isLoginName(loginName)) throw new EventAuthError("invalid_request");
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
 
     const result = await createControllerEvent({
       event: toDatabaseEvent(parsed.data.event),
+      loginName,
       passwordHash,
       sessionTokenHash: session.tokenHash,
       sessionTtlSeconds: SESSION_TTL_SECONDS,

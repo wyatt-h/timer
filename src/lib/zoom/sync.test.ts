@@ -124,20 +124,22 @@ describe("remaining seconds from authoritative state", () => {
     const result = sourceTimerFromEvent(timerEvent({ endsAt: NOW - 12_000 }), NOW);
 
     expect(result?.remainingSeconds).toBe(-12);
-    expect(result?.tone).toBe("critical");
+    expect(result?.tone).toBe("overtime");
   });
 
-  it("uses a duration-aware warning threshold for the contour", () => {
-    const result = sourceTimerFromEvent(timerEvent({ endsAt: NOW + 60_000 }), NOW);
+  it("uses the shared 30-second warning threshold for the contour", () => {
+    const result = sourceTimerFromEvent(timerEvent({ endsAt: NOW + 30_000 }), NOW);
 
     expect(result?.tone).toBe("caution");
   });
 
-  it("matches Zoom's native green, yellow, and red short-timer progression", () => {
-    expect(zoomIndicatorTone(7, 10)).toBe("normal");
-    expect(zoomIndicatorTone(4, 10)).toBe("caution");
-    expect(zoomIndicatorTone(1, 10)).toBe("critical");
-    expect(zoomIndicatorTone(-16, 10)).toBe("critical");
+  it("uses the same green, yellow, and red thresholds as the app", () => {
+    expect(zoomIndicatorTone(31, 600)).toBe("normal");
+    expect(zoomIndicatorTone(30, 600)).toBe("caution");
+    expect(zoomIndicatorTone(11, 600)).toBe("caution");
+    expect(zoomIndicatorTone(10, 600)).toBe("critical");
+    expect(zoomIndicatorTone(0, 600)).toBe("critical");
+    expect(zoomIndicatorTone(-16, 600)).toBe("overtime");
   });
 
   it("tracks the current panelist rather than the panel total", () => {
@@ -155,8 +157,10 @@ describe("remaining seconds from authoritative state", () => {
     expect(sourceTimerFromEvent(event, NOW)?.phase).toBe("finished");
   });
 
-  it("clamps only at the Zoom boundary", () => {
-    expect(toZoomTimerUnits(299.2)).toBe(299_200);
+  it("rounds like the web display and clamps at the Zoom boundary", () => {
+    expect(toZoomTimerUnits(299.2)).toBe(300_000);
+    expect(toZoomTimerUnits(10.01)).toBe(11_000);
+    expect(toZoomTimerUnits(10)).toBe(10_000);
     expect(toZoomTimerUnits(-12)).toBe(0);
   });
 });

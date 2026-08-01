@@ -1,6 +1,10 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import {
+  loginNameProblem,
+  sanitizeLoginNameInput,
+} from "@/lib/event-auth/login-name";
 import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/event-auth/password-rules";
 
 /*
@@ -13,11 +17,13 @@ import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/event-auth/password-
  */
 
 export type CredentialsDraft = {
+  loginName: string;
   password: string;
   confirmPassword: string;
 };
 
 export const EMPTY_CREDENTIALS: CredentialsDraft = {
+  loginName: "",
   password: "",
   confirmPassword: "",
 };
@@ -25,6 +31,7 @@ export const EMPTY_CREDENTIALS: CredentialsDraft = {
 /** Null when the draft is ready to send. */
 export function credentialsProblem(draft: CredentialsDraft) {
   return (
+    loginNameProblem(draft.loginName) ??
     passwordProblem(draft.password) ??
     (draft.password === draft.confirmPassword ? null : "The two passwords do not match.")
   );
@@ -41,6 +48,7 @@ export function CredentialsFields({
   showErrors: boolean;
   disabled?: boolean;
 }) {
+  const loginNameError = showErrors ? loginNameProblem(draft.loginName) : null;
   const passwordError = showErrors ? passwordProblem(draft.password) : null;
   const confirmError =
     showErrors && draft.password !== draft.confirmPassword
@@ -49,6 +57,20 @@ export function CredentialsFields({
 
   return (
     <div className="grid gap-4">
+      <Input
+        id="event-login-name"
+        label="Event login name"
+        value={draft.loginName}
+        disabled={disabled}
+        required
+        autoComplete="username"
+        supportingText="Lowercase name used with the password. It can be different from the event title."
+        aria-invalid={Boolean(loginNameError)}
+        errorText={loginNameError ?? ""}
+        onValueChange={(loginName) =>
+          onChange({ ...draft, loginName: sanitizeLoginNameInput(loginName) })
+        }
+      />
       <Input
         id="controller-password"
         label="Event password"
@@ -75,8 +97,8 @@ export function CredentialsFields({
         onValueChange={(confirmPassword) => onChange({ ...draft, confirmPassword })}
       />
       <p className="text-[12px] leading-relaxed text-text-subtle">
-        The event name and this password open the event on any device. There is no account or
-        recovery code, so choose a password you can share with the people running it.
+        This lowercase login name and password open the event on any device. There is no account,
+        so choose credentials you can share with the people running it.
       </p>
     </div>
   );

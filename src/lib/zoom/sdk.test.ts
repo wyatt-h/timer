@@ -271,12 +271,14 @@ describe("commands", () => {
       timer: {
         action: "start",
         direction: "down",
-        start: 299_400,
+        start: 300_000,
         withSound: false,
         countNegativeAfterAlarm: true,
         showNotification: false,
       },
       borderColor: "#00D96F",
+      backgroundColor: "#242424",
+      textColor: "#FFFFFF",
     });
   });
 
@@ -293,8 +295,31 @@ describe("commands", () => {
     expect(sdk.setDynamicIndicator).toHaveBeenNthCalledWith(1, { timer: { action: "pause" } });
     expect(sdk.setDynamicIndicator).toHaveBeenNthCalledWith(2, { timer: { action: "resume" } });
     expect(sdk.extendDynamicIndicator).toHaveBeenCalledWith({ extendDuration: 15_000 });
-    expect(sdk.setDynamicIndicatorStyle).toHaveBeenCalledWith({ borderColor: "#FFB000" });
+    expect(sdk.setDynamicIndicatorStyle).toHaveBeenCalledWith({
+      borderColor: "#FFB000",
+      backgroundColor: "#242424",
+      textColor: "#FFFFFF",
+    });
     expect(sdk.removeDynamicIndicator).toHaveBeenCalledTimes(1);
+  });
+
+  it("fills overtime red and restores the dark background when time is added", async () => {
+    const sdk = install(fakeSdk());
+    await initZoomSdk();
+
+    await publishZoomCommand({ kind: "style", tone: "overtime" }, 1);
+    await publishZoomCommand({ kind: "style", tone: "normal" }, 2);
+
+    expect(sdk.setDynamicIndicatorStyle).toHaveBeenNthCalledWith(1, {
+      borderColor: "#F04464",
+      backgroundColor: "#7A1C2D",
+      textColor: "#FFFFFF",
+    });
+    expect(sdk.setDynamicIndicatorStyle).toHaveBeenNthCalledWith(2, {
+      borderColor: "#00D96F",
+      backgroundColor: "#242424",
+      textColor: "#FFFFFF",
+    });
   });
 
   it("never calls Zoom for a no-op", async () => {

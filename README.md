@@ -5,7 +5,7 @@ Timer is a focused event timer for single speakers and multi-speaker panels. An 
 ## What is included
 
 - Independent events: no teams, no accounts, no workspace to belong to
-- Per-event access: the event name and a password of at least six characters
+- Per-event access: a lowercase event login name and a password of at least six characters
 - One-time, 24-hour invitation links that open an event without exposing its password
 - Event builder, reachable straight from the home screen
 - Edit existing events at any time
@@ -28,12 +28,13 @@ Timer is a focused event timer for single speakers and multi-speaker panels. An 
 ## How access works
 
 There are no user accounts and no teams. **An event is an independent resource
-opened with its event name and password.** The password is chosen when the event
-is created, and the event name is its globally unique sign-in identifier.
+opened with its lowercase login name and password.** Both are chosen when the
+event is created. The login name is globally unique and remains stable when the
+event's visible title changes.
 
-- **Create an event** asks for nothing up front. A password of at least six
-  characters is chosen in the builder.
-- **Open an event** on another device needs the event name and password. Names are
+- **Create an event** asks for nothing up front. A lowercase login name and a
+  password of at least six characters are chosen in the builder.
+- **Open an event** on another device needs the login name and password. Login names are
   matched without regard to capitalization or repeated spaces.
 - A signed-in device can create a **one-time invitation link**. It expires after
   24 hours, is consumed by the first recipient, and can be revoked before use.
@@ -155,10 +156,10 @@ run while any legacy event row exists rather than orphaning it. See
 
 Use **Import from CSV** on the home screen. A file can contain one event or several events grouped by `event_name`. Rows sharing an `item_order` value become a single agenda item, which is how a panel's panelists are grouped — without `item_order`, every row becomes its own item. Agenda items have no titles; they are identified by their speakers. Download `public/event-import-template.csv` for the supported columns and an example containing both a single speaker and a panel.
 
-Every imported event is independent, so each one needs a password before it can
-exist. No team or username is asked for or generated. The import asks once for a
-password and uses each imported event name as that event's sign-in identifier.
-Each event gets its own id, credential record, password hash, and session.
+Every imported event is independent, so each one needs a login name and password
+before it can exist. The import asks once for a shared password and lets the
+operator choose a distinct lowercase login name for every event. Each event gets
+its own id, credential record, password hash, and session.
 
 ## Deploy to Vercel
 
@@ -271,8 +272,8 @@ use generic public error messages, and never return a database message.
 
 | Route | Authorization |
 |---|---|
-| `POST /api/event-auth/create` | none — public, rate-limited. Takes the event and password, derives access from the event name, and sets the event session cookie |
-| `POST /api/event-auth/login` | event name + password, rate-limited. Returns only that event |
+| `POST /api/event-auth/create` | none — public, rate-limited. Takes the event, login name, and password, then sets the event session cookie |
+| `POST /api/event-auth/login` | login name + password, rate-limited. Returns only that event |
 | `POST /api/event-auth/logout` | the session cookie for the named event; clears it and no other |
 | `POST /api/event-auth/redeem-invite` | a valid, unused invitation token; consumes it and creates the recipient's event session |
 | `POST /api/event-auth/change-password` | a valid session for the event, plus the current password |
@@ -283,10 +284,10 @@ use generic public error messages, and never return a database message.
 | `DELETE /api/events/:eventId/invites` | a valid session; revokes the named unused invitation |
 
 No endpoint lists events; every read is addressed by one id and gated by that id's
-session. `login` never accepts an event id as proof of anything. An unknown event name and a
+session. `login` never accepts an event id as proof of anything. An unknown login name and a
 wrong password produce the same status and the same message. Statuses are 400 for
 malformed input, 401 for bad credentials or a missing session, 403 for a session
-belonging to a different event, 409 for a version conflict or a taken event name,
+belonging to a different event, 409 for a version conflict or a taken login name,
 429 when rate-limited, and 503 when the server has no Supabase configuration.
 
 ## Commands

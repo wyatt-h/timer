@@ -302,11 +302,19 @@ export async function refreshZoomContext(): Promise<ZoomEnvironment> {
 let queue: Promise<unknown> = Promise.resolve();
 let newestRevision = Number.NEGATIVE_INFINITY;
 
-/** High-contrast contours model Zoom's native normal/warning/critical states. */
-export const ZOOM_INDICATOR_BORDER_COLORS: Record<ZoomIndicatorTone, string> = {
-  normal: "#00D96F",
-  caution: "#FFB000",
-  critical: "#F04464",
+/**
+ * High-contrast contours model Zoom's native urgency states. Overtime is the
+ * one filled state; every other entry sets the dark background explicitly so
+ * extending an overtime timer restores the ordinary compact indicator.
+ */
+export const ZOOM_INDICATOR_STYLES: Record<
+  ZoomIndicatorTone,
+  { borderColor: string; backgroundColor: string; textColor: string }
+> = {
+  normal: { borderColor: "#00D96F", backgroundColor: "#242424", textColor: "#FFFFFF" },
+  caution: { borderColor: "#FFB000", backgroundColor: "#242424", textColor: "#FFFFFF" },
+  critical: { borderColor: "#F04464", backgroundColor: "#242424", textColor: "#FFFFFF" },
+  overtime: { borderColor: "#F04464", backgroundColor: "#7A1C2D", textColor: "#FFFFFF" },
 };
 
 async function send(instance: ZoomSdk, command: ZoomTimerCommand) {
@@ -328,7 +336,7 @@ async function send(instance: ZoomSdk, command: ZoomTimerCommand) {
           countNegativeAfterAlarm: true,
           showNotification: false,
         },
-        borderColor: ZOOM_INDICATOR_BORDER_COLORS[command.tone],
+        ...ZOOM_INDICATOR_STYLES[command.tone],
       });
       return;
     case "pause":
@@ -344,9 +352,7 @@ async function send(instance: ZoomSdk, command: ZoomTimerCommand) {
       });
       return;
     case "style":
-      await instance.setDynamicIndicatorStyle({
-        borderColor: ZOOM_INDICATOR_BORDER_COLORS[command.tone],
-      });
+      await instance.setDynamicIndicatorStyle(ZOOM_INDICATOR_STYLES[command.tone]);
       return;
     case "remove":
       await instance.removeDynamicIndicator();

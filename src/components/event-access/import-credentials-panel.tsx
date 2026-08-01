@@ -7,18 +7,24 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { createControllerEvent } from "@/lib/event-auth/client";
 import { rememberEvent } from "@/lib/event-auth/local-events";
+import {
+  loginNameProblem,
+  normalizeLoginName,
+  sanitizeLoginNameInput,
+} from "@/lib/event-auth/login-name";
 import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/event-auth/password-rules";
 import type { TimerEvent } from "@/lib/types";
 
 /*
  * A CSV can carry several events, and every one of them is an independent resource
- * that needs a password before it can exist. The imported event name is its
- * sign-in identifier; one password may be applied to the whole batch.
+ * that needs a login name and password before it can exist. One password may be
+ * applied to the whole batch, while every event keeps a distinct login name.
  */
 
 export type ImportedCredential = {
   eventId: string;
   eventName: string;
+  loginName: string;
 };
 
 export function ImportCredentialsPanel({
@@ -31,6 +37,9 @@ export function ImportCredentialsPanel({
   onFinished: (created: ImportedCredential[]) => void;
 }) {
   const [password, setPassword] = useState("");
+  const [loginNames, setLoginNames] = useState<Record<string, string>>(() =>
+    Object.fromEntries(events.map((event) => [event.id, normalizeLoginName(event.name)])),
+  );
   const [confirmPassword, setConfirmPassword] = useState("");
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -41,7 +50,11 @@ export function ImportCredentialsPanel({
 
   async function submit() {
     setTouched(true);
+    const invalidLogin = events.find((event) => loginNameProblem(loginNames[event.id] ?? ""));
     const problem =
+      (invalidLogin
+        ? `${invalidLogin.name}: ${loginNameProblem(loginNames[invalidLogin.id] ?? "")}`
+        : null) ??
       passwordProblem(password) ??
       (password === confirmPassword ? null : "The two passwords do not match.");
     if (problem) {
@@ -54,7 +67,8 @@ export function ImportCredentialsPanel({
     const results: ImportedCredential[] = [];
 
     for (const event of events) {
-      const result = await createControllerEvent({ password, event });
+      const loginName = normalizeLoginName(loginNames[event.id] ?? "");
+      const result = await createControllerEvent({ loginName, password, event });
       if (!result.ok) {
         setBusy(false);
         /*
@@ -76,6 +90,7 @@ export function ImportCredentialsPanel({
       results.push({
         eventId: result.data.event.id,
         eventName: result.data.event.name,
+        loginName: result.data.loginName,
       });
     }
 
@@ -97,7 +112,11 @@ export function ImportCredentialsPanel({
           </p>
         </div>
         <ul className="grid gap-1.5 text-[13px] font-medium">
-          {created.map((row) => <li key={row.eventId}>{row.eventName}</li>)}
+          {created.map((row) => (
+            <li key={row.eventId}>
+              {row.eventName} <span className="font-mono text-text-muted">({row.loginName})</span>
+            </li>
+          ))}
         </ul>
         <p className="flex items-center gap-1.5 text-[12px] font-medium text-over" role="alert">
           <AlertCircle size={12} aria-hidden />
@@ -119,12 +138,36 @@ export function ImportCredentialsPanel({
           Password for {events.length} event{events.length === 1 ? "" : "s"}
         </h2>
         <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">
-          Each event keeps its imported name. Use that event name and this password to open it on
-          another device.
+          Give each imported event a lowercase login name. Use that login name and this password
+          to open it on another device.
         </p>
       </div>
 
       <div className="grid gap-4">
+        {events.map((event, index) => {
+          const loginName = loginNames[event.id] ?? "";
+          const problem = touched ? loginNameProblem(loginName) : null;
+          return (
+            <Input
+              key={event.id}
+              id={`import-login-name-${index}`}
+              label={`${event.name} login name`}
+              value={loginName}
+              required
+              disabled={busy}
+              autoComplete="off"
+              supportingText="Lowercase name used to sign in."
+              aria-invalid={Boolean(problem)}
+              errorText={problem ?? ""}
+              onValueChange={(value) =>
+                setLoginNames((current) => ({
+                  ...current,
+                  [event.id]: sanitizeLoginNameInput(value),
+                }))
+              }
+            />
+          );
+        })}
         <Input
           id="import-password"
           label="Event password"

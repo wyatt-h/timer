@@ -2,7 +2,7 @@
  * Timer database validator
  *
  * Run this entire file in Supabase Dashboard -> SQL Editor after applying
- * 20260801010000_event_invites.sql.
+ * 20260801020000_separate_event_login_name.sql.
  *
  * READ-ONLY: this script creates, changes, and deletes nothing. It returns one
  * result table. The SUMMARY row must be PASS and every other row should be PASS.
@@ -178,7 +178,7 @@ expected_functions(signature) as (
     ('public.controller_event_payload(uuid)'),
     ('public.write_event_children(uuid,jsonb)'),
     ('public.issue_event_session(uuid,text,integer,integer)'),
-    ('public.create_controller_event(jsonb,text,text,integer)'),
+    ('public.create_controller_event(jsonb,text,text,text,integer)'),
     ('public.replace_controller_event(uuid,bigint,jsonb)'),
     ('public.delete_controller_event(uuid)'),
     ('public.change_controller_password(uuid,integer,text,text,integer)'),
@@ -197,7 +197,7 @@ security_definer_functions(signature) as (
     ('public.controller_event_payload(uuid)'),
     ('public.write_event_children(uuid,jsonb)'),
     ('public.issue_event_session(uuid,text,integer,integer)'),
-    ('public.create_controller_event(jsonb,text,text,integer)'),
+    ('public.create_controller_event(jsonb,text,text,text,integer)'),
     ('public.replace_controller_event(uuid,bigint,jsonb)'),
     ('public.delete_controller_event(uuid)'),
     ('public.change_controller_password(uuid,integer,text,text,integer)'),
@@ -211,7 +211,7 @@ security_definer_functions(signature) as (
 service_functions(signature) as (
   values
     ('public.controller_event_payload(uuid)'),
-    ('public.create_controller_event(jsonb,text,text,integer)'),
+    ('public.create_controller_event(jsonb,text,text,text,integer)'),
     ('public.replace_controller_event(uuid,bigint,jsonb)'),
     ('public.delete_controller_event(uuid)'),
     ('public.change_controller_password(uuid,integer,text,text,integer)'),
@@ -251,10 +251,10 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     exists (
       select 1
       from supabase_migrations.schema_migrations
-      where version = '20260801010000'
+      where version = '20260801020000'
     ),
     'FAIL',
-    'Expected version 20260801010000 in supabase_migrations.schema_migrations'
+    'Expected version 20260801020000 in supabase_migrations.schema_migrations'
 
   union all
   select
@@ -627,7 +627,7 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
       join public.event_access a on a.event_id = e.id
       where e.version < 0
          or (e.zoom_token is not null and e.zoom_token <> upper(e.zoom_token))
-         or a.login_name <> public.event_access_key(e.name)
+         or a.login_name <> public.event_access_key(a.login_name)
          or a.password_version < 1
          or a.password_hash not like 'scrypt$%'
     ),

@@ -280,7 +280,7 @@ export function AudienceDisplay() {
     <main
       className="relative flex min-h-svh flex-col overflow-hidden p-[clamp(1.375rem,4vw,3.5rem)] text-[#f8f7fc]"
       style={
-        speakerTone === "over"
+        speakerTone === "critical"
           ? AUDIENCE_OVER_BACKGROUND
           : AUDIENCE_BACKGROUND
       }
@@ -459,14 +459,14 @@ export function AudienceDisplay() {
           */}
         <div
           className={cn(
-            "tabular font-mono leading-[1.04] tracking-[-0.06em] transition-colors duration-300",
+            "tabular font-mono leading-[1.04] tracking-[-0.06em] text-[#4ade80] transition-colors duration-300",
             /* Sized against both axes: a short, wide projector would otherwise
                push the panel total and footer off screen. */
             isPanel
               ? "text-[clamp(4rem,min(15vw,18vh),14.375rem)]"
               : "text-[clamp(4.5rem,min(19vw,30vh),18.75rem)]",
             speakerTone === "caution" && "text-[#ffb547]",
-            speakerTone === "over" && "text-[#ff7a70] motion-safe:animate-pulse",
+            speakerTone === "critical" && "text-[#ff7a70] motion-safe:animate-pulse",
           )}
         >
           {formatTimer(remaining)}
@@ -475,7 +475,7 @@ export function AudienceDisplay() {
         {isPanel && (
           <div className="rounded-card border border-white/9 bg-white/4 px-[clamp(1.25rem,4vw,2.5rem)] py-3.5 text-center">
             <span className="mb-2 block text-[clamp(0.5625rem,1vw,0.75rem)] font-bold tracking-[0.12em] text-[#8f8e99] uppercase">Panel remaining</span>
-            <strong className={cn("tabular block font-mono text-[clamp(1.875rem,4.5vw,3.875rem)] leading-[0.9] font-medium tracking-[-0.06em] transition-colors duration-300", panelTone === "caution" && "text-[#ffb547]", panelTone === "over" && "text-[#ff7a70]")}>{formatTimer(panelRemaining)}</strong>
+            <strong className={cn("tabular block font-mono text-[clamp(1.875rem,4.5vw,3.875rem)] leading-[0.9] font-medium tracking-[-0.06em] text-[#4ade80] transition-colors duration-300", panelTone === "caution" && "text-[#ffb547]", panelTone === "critical" && "text-[#ff7a70]")}>{formatTimer(panelRemaining)}</strong>
           </div>
         )}
 
@@ -494,7 +494,7 @@ export function AudienceDisplay() {
           <i
             className={cn(
               "block h-full origin-left rounded-full transition-[transform,background-color] duration-200 ease-linear",
-              speakerTone === "over" ? "bg-[#ff7a70]" : speakerTone === "caution" ? "bg-[#ffb547]" : "bg-[#9b83f5]",
+              speakerTone === "critical" ? "bg-[#ff7a70]" : speakerTone === "caution" ? "bg-[#ffb547]" : "bg-[#4ade80]",
             )}
             style={{ transform: `scaleX(${speakerProgress})` }}
           />

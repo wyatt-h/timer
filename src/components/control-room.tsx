@@ -280,7 +280,7 @@ export function ControlRoom() {
       <main className="grid min-h-svh place-items-center p-8 text-center text-text-muted">
         <div>
           <h1 className="mb-2.5 text-[26px] font-semibold tracking-[-0.04em] text-ink">We couldn&apos;t find that event</h1>
-          <p className="mb-5 text-[13px]">Sign in with the event name and password to open it.</p>
+          <p className="mb-5 text-[13px]">Sign in with the event login name and password to open it.</p>
           <button className="inline-flex min-h-11 items-center gap-2 rounded-control bg-violet px-4 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark" onClick={() => router.push("/")}>
             Open an event
           </button>
@@ -293,6 +293,7 @@ export function ControlRoom() {
     <LiveConsole
       key={event.id}
       event={event}
+      loginName={controller.loginName}
       segments={segments}
       update={controller.update}
       saveState={controller.saveState}
@@ -309,6 +310,7 @@ export function ControlRoom() {
 
 type LiveConsoleProps = {
   event: TimerEvent;
+  loginName: string;
   segments: TimerSegment[];
   update: (updater: (current: TimerEvent) => TimerEvent) => void;
   saveState: SaveState;
@@ -327,6 +329,7 @@ type LiveConsoleProps = {
 
 function LiveConsole({
   event,
+  loginName,
   segments,
   update,
   saveState,
@@ -1298,7 +1301,7 @@ function LiveConsole({
           {isPanel ? (
             <div className="grid gap-2.5">
               {/* The speaker leads: it is the clock that changes most often. */}
-              <div className={cn("rounded-control border border-transparent bg-violet-soft p-4 text-center transition-colors duration-200", speakerTone === "caution" && "border-caution/28 bg-caution-soft", speakerTone === "over" && "border-over/30 bg-over-soft")}>
+              <div className={cn("rounded-control border border-success/20 bg-success-soft p-4 text-center transition-colors duration-200", speakerTone === "caution" && "border-caution/28 bg-caution-soft", speakerTone === "critical" && "border-over/30 bg-over-soft")}>
                 <div className="mb-2 flex items-center justify-center gap-1.5">
                   <span className="text-[12px] font-bold tracking-[0.08em] text-text-subtle uppercase">
                     {current.speaker}
@@ -1309,7 +1312,7 @@ function LiveConsole({
                     onToggle={toggleSpeakerMute}
                   />
                 </div>
-                <strong className="tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em]">
+                <strong className={cn("tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-success", speakerTone === "caution" && "text-caution", speakerTone === "critical" && "text-over")}>
                   {formatTimer(displaySeconds)}
                 </strong>
                 <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
@@ -1319,7 +1322,7 @@ function LiveConsole({
                 </button>
                 <TimeNudge label={`Adjust time for ${current.speaker}`} onAdjust={adjustSpeaker} />
               </div>
-              <div className={cn("rounded-control border border-transparent bg-surface-sunken p-4 text-center transition-colors duration-200", panelTone === "caution" && "border-caution/28 bg-caution-soft", panelTone === "over" && "border-over/30 bg-over-soft")}>
+              <div className={cn("rounded-control border border-success/20 bg-success-soft p-4 text-center transition-colors duration-200", panelTone === "caution" && "border-caution/28 bg-caution-soft", panelTone === "critical" && "border-over/30 bg-over-soft")}>
                 <div className="mb-2 flex items-center justify-center gap-1.5">
                   <span className="text-[12px] font-bold tracking-[0.08em] text-text-subtle uppercase">
                     Panel remaining
@@ -1330,7 +1333,7 @@ function LiveConsole({
                     onToggle={togglePanelMute}
                   />
                 </div>
-                <strong className="tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em]">
+                <strong className={cn("tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-success", panelTone === "caution" && "text-caution", panelTone === "critical" && "text-over")}>
                   {formatTimer(panelDisplaySeconds)}
                 </strong>
                 <TimerProgress label="Panel progress" ratio={panelProgress} tone={panelTone} />
@@ -1342,7 +1345,7 @@ function LiveConsole({
               </div>
             </div>
           ) : (
-            <div className={cn("rounded-control border border-transparent bg-surface-sunken p-4 text-center transition-colors duration-200", speakerTone === "caution" && "border-caution/28 bg-caution-soft", speakerTone === "over" && "border-over/30 bg-over-soft")}>
+            <div className={cn("rounded-control border border-success/20 bg-success-soft p-4 text-center transition-colors duration-200", speakerTone === "caution" && "border-caution/28 bg-caution-soft", speakerTone === "critical" && "border-over/30 bg-over-soft")}>
               <div className="mb-2 flex items-center justify-center gap-1.5">
                 <span className="text-[12px] font-bold tracking-[0.08em] text-text-subtle uppercase">
                   {current.speaker}
@@ -1353,7 +1356,7 @@ function LiveConsole({
                   onToggle={toggleSpeakerMute}
                 />
               </div>
-              <strong className="tabular mb-3 block font-mono text-[60px] leading-none font-medium tracking-[-0.06em]">
+              <strong className={cn("tabular mb-3 block font-mono text-[60px] leading-none font-medium tracking-[-0.06em] text-success", speakerTone === "caution" && "text-caution", speakerTone === "critical" && "text-over")}>
                 {formatTimer(displaySeconds)}
               </strong>
               <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
@@ -1450,6 +1453,7 @@ function LiveConsole({
           <ControllerAccessCard
             eventId={event.id}
             eventName={event.name}
+            loginName={loginName}
             onSignOut={() => {
               setAccessError("");
               void onSignOut({ discardUnsaved: signOutConfirmed }).then((result) => {
@@ -1647,7 +1651,7 @@ function TimerProgress({
       <i
         className={cn(
           "block h-full origin-left rounded-full transition-transform duration-200 ease-linear",
-          tone === "over" ? "bg-over" : tone === "caution" ? "bg-caution" : "bg-violet",
+          tone === "critical" ? "bg-over" : tone === "caution" ? "bg-caution" : "bg-success",
         )}
         style={{ transform: `scaleX(${ratio})` }}
       />

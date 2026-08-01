@@ -31,11 +31,13 @@ type Panel = "none" | "password" | "invite";
 export function ControllerAccessCard({
   eventId,
   eventName,
+  loginName,
   onSignOut,
   onDelete,
 }: {
   eventId: string;
   eventName: string;
+  loginName: string;
   onSignOut: () => void;
   onDelete: () => void;
 }) {
@@ -127,6 +129,9 @@ export function ControllerAccessCard({
         <ShieldCheck size={12} aria-hidden />
         Event access
       </span>
+      <p className="text-[12px] text-text-muted">
+        Login name: <strong className="font-mono font-semibold text-ink">{loginName}</strong>
+      </p>
 
       <div aria-live="polite">
         {notice && <p className="text-[12px] font-medium text-success">{notice}</p>}

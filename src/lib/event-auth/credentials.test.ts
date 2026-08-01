@@ -32,7 +32,7 @@ describe("controller login names", () => {
   });
 
   it("keeps a field from ever holding a value the server would refuse", () => {
-    expect(sanitizeLoginNameInput("Summit 2026!")).toBe("Summit 2026!");
+    expect(sanitizeLoginNameInput("Summit 2026!")).toBe("summit 2026!");
     expect(sanitizeLoginNameInput("a".repeat(140))).toHaveLength(LOGIN_NAME_MAX_LENGTH);
   });
 });

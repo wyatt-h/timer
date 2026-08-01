@@ -1,6 +1,9 @@
 import type { AgendaItem, Speaker, TimerEvent, TimerSegment } from "@/lib/types";
 
-export type TimerTone = "normal" | "caution" | "over";
+export type TimerTone = "normal" | "caution" | "critical";
+
+export const TIMER_CAUTION_SECONDS = 30;
+export const TIMER_CRITICAL_SECONDS = 10;
 
 /**
  * Countdowns keep running past zero. Negative values render with a leading
@@ -32,17 +35,16 @@ export function describeTimer(totalSeconds: number) {
   return rounded < 0 ? `${body} over time` : `${body} remaining`;
 }
 
-/**
- * Warn proportionally: a minute of notice on a short slot, but never more
- * than five minutes of amber on a long keynote.
- */
-export function cautionThreshold(durationSeconds: number) {
-  return Math.min(300, Math.max(60, durationSeconds * 0.15));
+/** The shared yellow threshold for controller, audience, and Zoom displays. */
+export function cautionThreshold(durationSeconds?: number) {
+  void durationSeconds;
+  return TIMER_CAUTION_SECONDS;
 }
 
-export function timerTone(remainingSeconds: number, durationSeconds: number): TimerTone {
-  if (remainingSeconds < 0) return "over";
-  if (remainingSeconds <= cautionThreshold(durationSeconds)) return "caution";
+export function timerTone(remainingSeconds: number, durationSeconds?: number): TimerTone {
+  void durationSeconds;
+  if (remainingSeconds <= TIMER_CRITICAL_SECONDS) return "critical";
+  if (remainingSeconds <= TIMER_CAUTION_SECONDS) return "caution";
   return "normal";
 }
 

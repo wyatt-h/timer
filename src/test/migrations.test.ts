@@ -36,6 +36,7 @@ afterAll(async () => {
 const CONTROLLER_MIGRATION = "20260731010000_event_controller_auth.sql";
 const ACCESS_MIGRATION = "20260801000000_simplify_event_access.sql";
 const INVITE_MIGRATION = "20260801010000_event_invites.sql";
+const LOGIN_NAME_MIGRATION = "20260801020000_separate_event_login_name.sql";
 const VALIDATOR = fileURLToPath(
   new URL("../../supabase/validate_event_controller_database.sql", import.meta.url),
 );
@@ -46,7 +47,7 @@ describe("the complete migration history", () => {
     // first failure, so reaching this point is the assertion. Named explicitly
     // because it is the check that guards against an unrunnable migration.
     const files = migrationFiles();
-    expect(files.at(-1)).toBe(INVITE_MIGRATION);
+    expect(files.at(-1)).toBe(LOGIN_NAME_MIGRATION);
     expect(files).toEqual([...files].sort());
 
     const tables = await rows<{ table_name: string }>(
@@ -83,7 +84,7 @@ describe("the complete migration history", () => {
       create schema if not exists supabase_migrations;
       create table if not exists supabase_migrations.schema_migrations (version text primary key);
       insert into supabase_migrations.schema_migrations (version)
-      values ('20260801010000') on conflict do nothing;
+      values ('20260801020000') on conflict do nothing;
     `);
     const report = await rows<{ area: string; status: string; details: string }>(
       db,
@@ -296,7 +297,7 @@ describe("row level security", () => {
 
   it("makes every controller writer callable by service_role alone", async () => {
     const signatures = [
-      "public.create_controller_event(jsonb, text, text, integer)",
+      "public.create_controller_event(jsonb, text, text, text, integer)",
       "public.replace_controller_event(uuid, bigint, jsonb)",
       "public.delete_controller_event(uuid)",
       "public.controller_event_payload(uuid)",
@@ -341,7 +342,7 @@ describe("row level security", () => {
 describe("existing-row safety", () => {
   it("refuses to run when legacy team-owned events exist, and destroys nothing", async () => {
     const legacy = await createBareDatabase();
-    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION, INVITE_MIGRATION].includes(name))) {
+    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION, INVITE_MIGRATION, LOGIN_NAME_MIGRATION].includes(name))) {
       await legacy.exec(readMigration(file));
     }
 
@@ -387,7 +388,7 @@ describe("existing-row safety", () => {
 
   it("runs once the operator has explicitly cleared the legacy rows", async () => {
     const legacy = await createBareDatabase();
-    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION, INVITE_MIGRATION].includes(name))) {
+    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION, INVITE_MIGRATION, LOGIN_NAME_MIGRATION].includes(name))) {
       await legacy.exec(readMigration(file));
     }
     await legacy.exec(`
@@ -456,13 +457,18 @@ describe("controller event functions", () => {
     };
   }
 
-  async function create(eventName: string, overrides: Record<string, unknown> = {}) {
+  async function create(
+    eventName: string,
+    overrides: Record<string, unknown> = {},
+    loginName = eventName,
+  ) {
     const document = await eventDocument({ name: eventName, ...overrides });
     const result = await one<{ result: Record<string, unknown> }>(
       db,
-      `select public.create_controller_event($1::jsonb, $2, $3, $4) as result`,
+      `select public.create_controller_event($1::jsonb, $2, $3, $4, $5) as result`,
       [
         JSON.stringify(document),
+        loginName,
         "scrypt$fake-password-hash",
         // A distinct 64-character digest per event, as a real token hash is.
         (await newUuid(db)).replace(/-/g, "").padEnd(64, "0"),
@@ -519,14 +525,14 @@ describe("controller event functions", () => {
     expect(speakers?.count).toBeGreaterThan(0);
   });
 
-  it("refuses a duplicate event name without writing anything", async () => {
-    await create("summit-duplicate");
+  it("refuses a duplicate login name without writing anything", async () => {
+    await create("First display name", {}, "summit-duplicate");
     const before = await one<{ count: number }>(
       db,
       `select count(*)::int as count from public.events`,
     );
 
-    const { result } = await create("summit-duplicate");
+    const { result } = await create("Different display name", {}, "SUMMIT-DUPLICATE");
     expect(result.status).toBe("login_taken");
 
     const after = await one<{ count: number }>(
@@ -536,8 +542,8 @@ describe("controller event functions", () => {
     expect(after?.count).toBe(before?.count);
   });
 
-  it("canonicalizes the event name used for access", async () => {
-    const { result } = await create("Bad_Name");
+  it("canonicalizes the separately chosen login name", async () => {
+    const { result } = await create("A display name", {}, "  Bad_Name  ");
     expect((result.payload as Record<string, unknown>).loginName).toBe("bad_name");
   });
 
@@ -551,6 +557,7 @@ describe("controller event functions", () => {
     );
     expect(updated?.result.status).toBe("updated");
     expect(Number((updated?.result.payload as Record<string, unknown>).version)).toBe(1);
+    expect((updated?.result.payload as Record<string, unknown>).loginName).toBe("summit-version");
 
     // A second device still believing it is at version 0.
     const stale = await one<{ result: Record<string, unknown> }>(
@@ -700,7 +707,7 @@ describe("controller event functions", () => {
     expect(again?.result.status).toBe("not_found");
   });
 
-  it("frees the event name when the event is deleted", async () => {
+  it("frees the login name when the event is deleted", async () => {
     const { document } = await create("summit-reusable");
     await db.query(`select public.delete_controller_event($1)`, [document.id]);
     const { result } = await create("summit-reusable");
@@ -734,9 +741,10 @@ describe("credential mutations are transactional", () => {
       runtime: { status: "ready", segmentIndex: 0, remainingSeconds: 600, soundEnabled: true },
     };
     await db.query(
-      `select public.create_controller_event($1::jsonb, $2, $3, $4)`,
+      `select public.create_controller_event($1::jsonb, $2, $3, $4, $5)`,
       [
         JSON.stringify(document),
+        eventName,
         "scrypt$old-password",
         (await newUuid(db)).replace(/-/g, "").padEnd(64, "0"),
         3600,
@@ -863,7 +871,7 @@ describe("sessions", () => {
       newUuid(db),
       newUuid(db),
     ]);
-    await db.query(`select public.create_controller_event($1::jsonb, $2, $3, $4)`, [
+    await db.query(`select public.create_controller_event($1::jsonb, $2, $3, $4, $5)`, [
       JSON.stringify({
         id,
         name: eventName,
@@ -880,6 +888,7 @@ describe("sessions", () => {
         ],
         runtime: { status: "ready", segmentIndex: 0, remainingSeconds: 600 },
       }),
+      eventName,
       "scrypt$p",
       tokenHash,
       ttlSeconds,
@@ -982,7 +991,7 @@ describe("one-time event invitations", () => {
       newUuid(db),
       newUuid(db),
     ]);
-    await db.query(`select public.create_controller_event($1::jsonb, $2, $3, 3600)`, [
+    await db.query(`select public.create_controller_event($1::jsonb, $2, $3, $4, 3600)`, [
       JSON.stringify({
         id,
         name: eventName,
@@ -997,6 +1006,7 @@ describe("one-time event invitations", () => {
         }],
         runtime: { status: "ready", segmentIndex: 0, remainingSeconds: 600 },
       }),
+      eventName,
       "scrypt$p",
       (await newUuid(db)).replace(/-/g, "").padEnd(64, "0"),
     ]);

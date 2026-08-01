@@ -113,6 +113,7 @@ export type CreateResult =
 
 export async function createControllerEvent(input: {
   event: unknown;
+  loginName: string;
   passwordHash: string;
   /** The digest of the creating device's session token. The token stays in Node. */
   sessionTokenHash: string;
@@ -120,6 +121,7 @@ export async function createControllerEvent(input: {
 }): Promise<CreateResult> {
   const { data, error } = await supabaseAdmin().rpc("create_controller_event", {
     p_event: input.event,
+    p_login_name: input.loginName,
     p_password_hash: input.passwordHash,
     p_token_hash: input.sessionTokenHash,
     p_ttl_seconds: input.sessionTtlSeconds,
@@ -146,7 +148,6 @@ export type ReplaceResult =
   /* The authoritative state comes back with the conflict so the browser can
    * show what actually happened instead of asking for it in a second round trip. */
   | { status: "conflict"; payload: ControllerEvent }
-  | { status: "login_taken" }
   | { status: "not_found" };
 
 export async function replaceControllerEvent(
@@ -162,7 +163,6 @@ export async function replaceControllerEvent(
   if (error) throw new EventAuthError("internal");
   const result = data as { status?: string; payload?: unknown } | null;
   if (result?.status === "not_found") return { status: "not_found" };
-  if (result?.status === "login_taken") return { status: "login_taken" };
   if (result?.status === "conflict") {
     return { status: "conflict", payload: payloadOrThrow(result.payload) };
   }

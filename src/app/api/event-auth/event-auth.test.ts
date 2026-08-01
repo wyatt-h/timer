@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createMigratedDatabase, one, rows, type TestDatabase } from "@/test/pg";
 import { createPgSupabaseClient } from "@/test/pg-supabase";
+import { normalizeLoginName } from "@/lib/event-auth/login-name";
 import type { TimerEvent } from "@/lib/types";
 
 let db: TestDatabase;
@@ -117,18 +118,22 @@ function applyCookies(
   }
 }
 
-async function createEvent(name = "Summit", password = PASSWORD) {
+async function createEvent(
+  name = "Summit",
+  password = PASSWORD,
+  loginName = normalizeLoginName(name),
+) {
   const event = await draftEvent(name);
   const response = await createRoute(
-    jsonRequest("http://localhost/api/event-auth/create", { password, event }),
+    jsonRequest("http://localhost/api/event-auth/create", { loginName, password, event }),
   );
   applyCookies(response);
   return { response, body: await read(response), event };
 }
 
-async function login(eventName: string, password = PASSWORD) {
+async function login(loginName: string, password = PASSWORD) {
   const response = await loginRoute(
-    jsonRequest("http://localhost/api/event-auth/login", { eventName, password }),
+    jsonRequest("http://localhost/api/event-auth/login", { loginName, password }),
   );
   applyCookies(response);
   return { response, body: await read(response) };
@@ -139,12 +144,16 @@ function context(eventId: string) {
 }
 
 describe("event creation", () => {
-  it("uses the event name as the canonical access key and returns no recovery secret", async () => {
-    const { response, body, event } = await createEvent("Global   Call");
+  it("stores a lowercase login name separately from the display name", async () => {
+    const { response, body, event } = await createEvent(
+      "Global Call 2026",
+      PASSWORD,
+      "  GLOBAL   CONTROL  ",
+    );
 
     expect(response.status).toBe(201);
     expect(Object.keys(body).sort()).toEqual(["event", "loginName", "version"]);
-    expect(body.loginName).toBe("global call");
+    expect(body.loginName).toBe("global control");
     expect(body).not.toHaveProperty("recoveryCode");
     expect(JSON.stringify(body)).not.toMatch(/team/i);
 
@@ -153,7 +162,7 @@ describe("event creation", () => {
       `select login_name, password_hash from public.event_access where event_id = $1`,
       [event.id],
     );
-    expect(access?.login_name).toBe("global call");
+    expect(access?.login_name).toBe("global control");
     expect(access?.password_hash).toMatch(/^scrypt\$/);
     expect(access?.password_hash).not.toContain(PASSWORD);
 
@@ -168,9 +177,9 @@ describe("event creation", () => {
     expect((await createEvent("Long enough", "123456")).response.status).toBe(201);
   });
 
-  it("rejects event names that canonicalize to the same identifier", async () => {
-    await createEvent("Global Call");
-    const duplicate = await createEvent("  GLOBAL   CALL  ");
+  it("rejects login names that canonicalize to the same identifier", async () => {
+    await createEvent("Global Call", PASSWORD, "event controller");
+    const duplicate = await createEvent("Different Display Name", PASSWORD, " EVENT   CONTROLLER ");
 
     expect(duplicate.response.status).toBe(409);
     expect(duplicate.body.error).toBe("login_taken");
@@ -180,11 +189,11 @@ describe("event creation", () => {
   it("validates the full event before writing anything", async () => {
     const event = await draftEvent("Invalid");
     const cases = [
-      { password: "12345", event },
+      { loginName: "invalid", password: "12345", event },
       { password: PASSWORD },
-      { password: PASSWORD, event: { ...event, id: "not-a-uuid" } },
-      { password: PASSWORD, event: { ...event, agenda: [] } },
-      { password: PASSWORD, event: { ...event, name: "" } },
+      { loginName: "invalid", password: PASSWORD, event: { ...event, id: "not-a-uuid" } },
+      { loginName: "invalid", password: PASSWORD, event: { ...event, agenda: [] } },
+      { loginName: "invalid", password: PASSWORD, event: { ...event, name: "" } },
     ];
     for (const body of cases) {
       const response = await createRoute(
@@ -224,8 +233,8 @@ describe("opening an event", () => {
 });
 
 describe("event writes", () => {
-  it("renames the event and its access key in one transaction", async () => {
-    const created = await createEvent("Global Call");
+  it("renames the event without changing its login name", async () => {
+    const created = await createEvent("Global Call", PASSWORD, "global controller");
     const renamed = { ...created.event, name: "Leadership Q&A" };
     const response = await eventRoute.PUT(
       jsonRequest(`http://localhost/api/events/${created.event.id}`, {
@@ -237,18 +246,18 @@ describe("event writes", () => {
 
     expect(response.status).toBe(200);
     expect((await read(response)).version).toBe(1);
-    expect((await one<{ login_name: string }>(db, `select login_name from public.event_access`))?.login_name).toBe("leadership q&a");
+    expect((await one<{ login_name: string }>(db, `select login_name from public.event_access`))?.login_name).toBe("global controller");
 
     cookieJar.clear();
-    expect((await login("Global Call")).response.status).toBe(401);
-    expect((await login("Leadership Q&A")).response.status).toBe(200);
+    expect((await login("global controller")).response.status).toBe(200);
+    expect((await login("Leadership Q&A")).response.status).toBe(401);
   });
 
-  it("rejects a duplicate rename without changing the event", async () => {
-    const alpha = await createEvent("Alpha");
-    await createEvent("Bravo");
+  it("allows duplicate display names when login names differ", async () => {
+    const alpha = await createEvent("Alpha", PASSWORD, "alpha login");
+    await createEvent("Bravo", PASSWORD, "bravo login");
     cookieJar.clear();
-    await login("Alpha");
+    await login("alpha login");
 
     const response = await eventRoute.PUT(
       jsonRequest(`http://localhost/api/events/${alpha.event.id}`, {
@@ -258,9 +267,8 @@ describe("event writes", () => {
       context(alpha.event.id),
     );
 
-    expect(response.status).toBe(409);
-    expect((await read(response)).error).toBe("login_taken");
-    expect((await one<{ name: string; version: number }>(db, `select name, version from public.events where id = $1`, [alpha.event.id]))).toEqual({ name: "Alpha", version: 0 });
+    expect(response.status).toBe(200);
+    expect((await one<{ name: string; version: number }>(db, `select name, version from public.events where id = $1`, [alpha.event.id]))).toEqual({ name: "BRAVO", version: 1 });
   });
 
   it("returns the winner when a second device saves a stale version", async () => {

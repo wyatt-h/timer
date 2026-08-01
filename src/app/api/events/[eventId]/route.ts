@@ -73,7 +73,6 @@ export async function PUT(request: Request, context: Context) {
       toDatabaseEvent(parsed.data.event),
     );
     if (result.status === "not_found") throw new EventAuthError("not_found");
-    if (result.status === "login_taken") return apiFailure("login_taken", { cookies: [refresh] });
     if (result.status === "conflict") {
       return apiFailure("conflict", { data: result.payload, cookies: [refresh] });
     }

@@ -1,14 +1,14 @@
 # Event access database migration
 
-The final Timer access model has no teams, user accounts, controller usernames,
-or recovery codes. Each event is opened with:
+The final Timer access model has no teams, user accounts, or recovery codes. Each
+event is opened with:
 
-- its event name; and
+- its separately chosen lowercase login name; and
 - a password of at least six characters.
 
-The database stores a canonical event-name key (trimmed, whitespace collapsed,
-and lowercased), so `Global Call` and ` global   CALL ` identify the same event.
-Event names must therefore be globally unique after canonicalization.
+The visible event title is independent and can be changed without changing the
+login. The database canonicalizes login names by trimming, collapsing whitespace,
+and lowercasing them.
 
 A signed-in controller can also create a one-time invitation. The raw token is
 never stored in PostgreSQL; its hash expires after 24 hours and is deleted as it
@@ -16,7 +16,7 @@ creates the recipient's event session.
 
 ## Migration files
 
-Apply every file in `supabase/migrations` in filename order. The two access-model
+Apply every file in `supabase/migrations` in filename order. The access-model
 migrations are:
 
 1. `20260731010000_event_controller_auth.sql` — removes the legacy team/account
@@ -25,6 +25,8 @@ migrations are:
    identifier and removes recovery credentials/functions.
 3. `20260801010000_event_invites.sql` — adds hashed, one-time, 24-hour event
    invitation links and the transactional redemption functions.
+4. `20260801020000_separate_event_login_name.sql` — separates the stable login
+   name from the editable event title.
 
 Do not edit a migration that has already been applied. Add a new forward migration
 for future schema changes.
@@ -38,20 +40,8 @@ npx supabase@latest projects list
 npx supabase@latest migration list
 ```
 
-If the database may contain events, check for event names that will collide:
-
-```sql
-select
-  lower(regexp_replace(btrim(name), '[[:space:]]+', ' ', 'g')) as access_name,
-  count(*) as event_count,
-  array_agg(id order by id) as event_ids
-from public.events
-group by 1
-having count(*) > 1;
-```
-
-The result must be empty before applying the simplification migration. Rename or
-delete duplicates first. A freshly reset database already satisfies this check.
+The separation migration retains every existing login name, so it does not need
+to rewrite event or credential rows.
 
 ## Apply
 
@@ -108,18 +98,19 @@ SUPABASE_SERVICE_ROLE_KEY
 `SUPABASE_SERVICE_ROLE_KEY` must never have a `NEXT_PUBLIC_` prefix. Redeploy after
 adding or changing environment variables.
 
-Apply the database migration before pushing/deploying application code that calls
-the new four-argument `create_controller_event` function.
+Apply the database migration before deploying application code that calls the new
+five-argument `create_controller_event` function.
 
 ## Smoke test
 
 After deployment:
 
-1. Create an event named `Access Smoke Test` with a six-character password.
+1. Create an event titled `Access Smoke Test`, with login name `access smoke`, and
+   a six-character password.
 2. Confirm no recovery-code screen appears.
-3. In a private browser, open the event with `access smoke test` and the password.
-4. Rename it to `Renamed Smoke Test` and save.
-5. Confirm the old name no longer signs in and the new name does.
+3. In a private browser, open the event with `access smoke` and the password.
+4. Rename its visible title to `Renamed Smoke Test` and save.
+5. Confirm `access smoke` still signs in.
 6. Open it on two devices, edit from both, and confirm a stale save shows the
    existing version-conflict resolution instead of overwriting silently.
 7. Change the password; confirm another device is signed out while the changing

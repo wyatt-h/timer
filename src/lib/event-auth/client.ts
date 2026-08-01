@@ -74,6 +74,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<ApiResu
 }
 
 export function createControllerEvent(input: {
+  loginName: string;
   password: string;
   event: TimerEvent;
 }) {
@@ -83,10 +84,10 @@ export function createControllerEvent(input: {
   });
 }
 
-export function loginToEvent(eventName: string, password: string) {
+export function loginToEvent(loginName: string, password: string) {
   return request<ControllerEvent>("/api/event-auth/login", {
     method: "POST",
-    body: JSON.stringify({ eventName, password }),
+    body: JSON.stringify({ loginName, password }),
   });
 }
 

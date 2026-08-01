@@ -23,6 +23,7 @@ import { makeEvent } from "@/lib/store";
 import { useControllerEvent } from "@/lib/controller/use-controller-event";
 import { createControllerEvent } from "@/lib/event-auth/client";
 import { rememberEvent } from "@/lib/event-auth/local-events";
+import { normalizeLoginName } from "@/lib/event-auth/login-name";
 import { agendaFormSchema, type AgendaFormValues } from "@/lib/agenda-schema";
 import { toAgendaItems, toFormValues } from "@/lib/agenda-mapping";
 import type { TimerEvent } from "@/lib/types";
@@ -36,7 +37,7 @@ const EMPTY_AGENDA: AgendaFormValues = { agendaItems: [] };
 
 /*
  * A new event is not saved anywhere until it has credentials, so the builder ends
- * with a password. The event name itself is the sign-in identifier.
+ * with a separate lowercase login name and password.
  */
 type Stage = "editing" | "credentials";
 
@@ -207,6 +208,11 @@ export function EventEditor() {
      * than writing an event only this browser would ever be able to see.
      */
     if (!isEditing) {
+      setCredentials((current) =>
+        current.loginName
+          ? current
+          : { ...current, loginName: normalizeLoginName(next.name) },
+      );
       setPendingStart(start);
       setStage("credentials");
       setCreateError("");
@@ -256,6 +262,7 @@ export function EventEditor() {
     setCreating(true);
     setCreateError("");
     const result = await createControllerEvent({
+      loginName: credentials.loginName,
       password: credentials.password,
       event: next,
     });
@@ -303,10 +310,10 @@ export function EventEditor() {
                   Back to the run of show
                 </Button>
                 <h1 className="mt-3 text-[24px] font-semibold tracking-[-0.04em]">
-                  Set a password for {draft.name.trim() || "this event"}
+                  Set access for {draft.name.trim() || "this event"}
                 </h1>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">
-                  On another device, enter the event name and this password to run the same event.
+                  Choose a lowercase login name and password for opening this event on another device.
                 </p>
               </div>
 
@@ -371,7 +378,7 @@ export function EventEditor() {
               We couldn&apos;t find that event
             </h1>
             <p className="mb-5 text-[13px]">
-              Sign in with the event name and password to open it.
+              Sign in with the event login name and password to open it.
             </p>
             <Button variant="primary" onClick={() => router.push("/")}>
               Open an event

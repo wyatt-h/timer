@@ -39,13 +39,13 @@ const STATUS: Record<EventAuthErrorCode, number> = {
 const MESSAGE: Record<EventAuthErrorCode, string> = {
   invalid_request: "That request could not be understood.",
   // Deliberately identical for an unknown login name and a wrong password.
-  invalid_credentials: "That event name and password do not match.",
+  invalid_credentials: "That event login name and password do not match.",
   invalid_invite: "That invitation link has expired or has already been used.",
   session_required: "Sign in to this event again.",
   wrong_event: "This session is not for that event.",
   not_found: "That event could not be found.",
   conflict: "This event changed somewhere else. Reloading the latest version.",
-  login_taken: "An event with that name already exists. Choose a different event name.",
+  login_taken: "That event login name is already used. Choose a different one.",
   rate_limited: "Too many attempts. Wait a moment and try again.",
   unavailable: "Event storage is not configured.",
   internal: "Something went wrong saving that.",

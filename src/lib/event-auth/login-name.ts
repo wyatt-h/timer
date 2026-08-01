@@ -1,7 +1,7 @@
 /*
- * An event's display name is also its sign-in identifier. The database stores a
- * canonical form so capitalization and repeated whitespace do not accidentally
- * create two credentials that look like the same event to a person.
+ * An event login name is separate from its display name. The database stores a
+ * canonical lowercase form so capitalization and repeated whitespace do not
+ * accidentally create two credentials that look identical to a person.
  *
  * The same constraints are written into `event_access` as a CHECK, so a value
  * that slipped past this module would still be refused by the database.
@@ -43,5 +43,5 @@ export function isLoginName(value: string) {
  * server would refuse.
  */
 export function sanitizeLoginNameInput(value: string) {
-  return value.slice(0, LOGIN_NAME_MAX_LENGTH);
+  return value.toLowerCase().slice(0, LOGIN_NAME_MAX_LENGTH);
 }

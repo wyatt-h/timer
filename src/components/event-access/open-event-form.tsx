@@ -25,7 +25,7 @@ export function OpenEventForm({
 }: {
   onOpened: (payload: ControllerEvent) => void;
 }) {
-  const [eventName, setEventName] = useState("");
+  const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,7 +42,7 @@ export function OpenEventForm({
     setError("");
 
     setBusy(true);
-    const result = await loginToEvent(normalizeLoginName(eventName), password);
+    const result = await loginToEvent(normalizeLoginName(loginName), password);
     setBusy(false);
     if (!result.ok) {
       setError(result.message);
@@ -58,13 +58,13 @@ export function OpenEventForm({
       className="grid w-full gap-3 rounded-[22px] border border-ink/8 bg-white/80 p-[18px] text-left shadow-[0_22px_70px_rgba(31,26,50,0.08),inset_0_1px_rgba(255,255,255,0.9)] backdrop-blur-2xl"
     >
       <Input
-        id="open-event-name"
-        label="Event name"
-        value={eventName}
+        id="open-login-name"
+        label="Event login name"
+        value={loginName}
         required
         disabled={busy}
         autoComplete="username"
-        onValueChange={setEventName}
+        onValueChange={(value) => setLoginName(value.toLowerCase())}
       />
       <Input
         id="open-password"

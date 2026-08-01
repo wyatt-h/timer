@@ -1,4 +1,4 @@
-import { flattenSegments } from "@/lib/format";
+import { flattenSegments, timerTone, type TimerTone } from "@/lib/format";
 import type { TimerEvent } from "@/lib/types";
 
 /*
@@ -33,22 +33,19 @@ const MINIMUM_PUBLISHABLE_SECONDS = 1;
 const MAX_LABEL_LENGTH = 30;
 
 export type TimerPhase = "idle" | "running" | "paused" | "finished";
-export type ZoomIndicatorTone = "normal" | "caution" | "critical";
+/** Zoom adds a filled overtime state beyond the three shared app colors. */
+export type ZoomIndicatorTone = TimerTone | "overtime";
 
 /**
- * Zoom's native timer moves from green to yellow to red before zero. Preserve
- * that behavior while scaling the warning windows to each speaker's duration:
- * yellow for roughly the final 15%, red for the final 5%, with practical caps.
+ * The Zoom contour deliberately uses the same thresholds as the controller and
+ * audience displays. The duration argument remains for a stable call signature.
  */
 export function zoomIndicatorTone(
   remainingSeconds: number,
   durationSeconds: number,
 ): ZoomIndicatorTone {
-  const cautionAt = Math.min(300, Math.max(5, durationSeconds * 0.15));
-  const criticalAt = Math.min(60, Math.max(2, durationSeconds * 0.05));
-  if (remainingSeconds <= criticalAt) return "critical";
-  if (remainingSeconds <= cautionAt) return "caution";
-  return "normal";
+  if (remainingSeconds < 0) return "overtime";
+  return timerTone(remainingSeconds, durationSeconds);
 }
 
 /**
@@ -101,7 +98,7 @@ export type ZoomTimerPlan = {
  * the SDK boundary lets the rest of the application continue to use seconds.
  */
 export function toZoomTimerUnits(seconds: number) {
-  return Math.max(0, Math.ceil(seconds * 1000));
+  return Math.max(0, Math.ceil(seconds) * 1000);
 }
 
 function shortLabel(label: string) {

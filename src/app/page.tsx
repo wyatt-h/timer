@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
  * Creating an event asks for nothing up front — no team, no account, no name to
  * belong to. The event password is chosen in the builder, at
  * the point where there is an event for it to protect. Opening an existing event
- * needs its event name and password and nothing else.
+ * needs its event login name and password and nothing else.
  *
  * The list of events below comes from this browser's own localStorage. There is no
  * endpoint that returns a directory of events, so nothing here can enumerate
