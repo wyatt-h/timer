@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { House } from "lucide-react";
+import { BookOpen, House } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 
@@ -27,12 +27,20 @@ export function AppHeader() {
         <Link href="/" aria-label="Timer home">
           <BrandMark />
         </Link>
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/">
-            <House size={15} aria-hidden />
-            Home
-          </Link>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/guide">
+              <BookOpen size={15} aria-hidden />
+              Guide
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/">
+              <House size={15} aria-hidden />
+              Home
+            </Link>
+          </Button>
+        </div>
       </header>
     </>
   );

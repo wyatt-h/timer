@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Clock3, FileUp, Plus } from "lucide-react";
+import { ArrowRight, BookOpen, Clock3, FileUp, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -69,8 +69,15 @@ export default function Home() {
         className="pointer-events-none absolute -top-[22vw] -right-[16vw] -z-10 size-[46vw] rounded-full bg-[radial-gradient(circle,rgba(159,134,255,0.2),transparent_68%)] blur-[14px]"
       />
 
-      <nav className="flex h-[88px] w-full items-center" aria-label="Main navigation">
+      <nav className="flex h-[88px] w-full items-center justify-between" aria-label="Main navigation">
         <BrandMark />
+        <Link
+          href="/guide"
+          className="inline-flex h-9 items-center gap-2 rounded-full px-3 text-[12px] font-semibold text-text-muted transition-colors hover:bg-white/70 hover:text-violet-dark"
+        >
+          <BookOpen size={14} aria-hidden />
+          How it works
+        </Link>
       </nav>
 
       <section className="mx-auto flex w-[min(100%,620px)] flex-1 flex-col items-center justify-center pt-10 pb-18 text-center">
@@ -162,8 +169,9 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="flex min-h-[62px] w-full items-center text-[12px] text-text-subtle">
+      <footer className="flex min-h-[62px] w-full items-center justify-between gap-4 text-[12px] text-text-subtle">
         <span>Timer</span>
+        <Link href="/guide" className="transition-colors hover:text-violet-dark">Product guide</Link>
       </footer>
 
       <ImportDialog
