@@ -60,6 +60,11 @@ import { SaveStatusBadge } from "@/components/event-access/save-status-badge";
 import type { SaveState } from "@/lib/save-coordinator";
 import { useThrottledAnnouncement } from "@/lib/use-throttled-announcement";
 import { formatZoomToken, makeZoomToken } from "@/lib/zoom/token";
+import {
+  AUTO_STOPPED_REMAINING_SECONDS,
+  MAX_OVERTIME_SECONDS,
+  readTimerClock,
+} from "@/lib/timer-clock";
 import type { AgendaItem, TimerEvent, RuntimeState, Speaker, TimerSegment } from "@/lib/types";
 
 type AdjustmentFeedback = {
@@ -78,17 +83,6 @@ function adjustmentMessage(seconds: number, target: "speaker" | "panel") {
   return `${seconds > 0 ? "Added" : "Removed"} ${amount} ${
     seconds > 0 ? "to" : "from"
   } the ${target} timer.`;
-}
-
-/** Countdowns keep running past zero, so nothing here is clamped. */
-function remainingNow(
-  status: RuntimeState["status"] | undefined,
-  endsAt: number | null | undefined,
-  fallback: number | null | undefined,
-  now = Date.now(),
-) {
-  if (status === "running" && endsAt) return (endsAt - now) / 1000;
-  return fallback ?? 0;
 }
 
 export function panelistTimingIsLocked(
@@ -147,12 +141,12 @@ export function speakerTimerTogglePatch({
   if (runtime.status === "running") {
     return {
       status: "paused",
-      remainingSeconds: remainingNow(
+      remainingSeconds: readTimerClock(
         runtime.status,
         runtime.endsAt,
         runtime.remainingSeconds,
         now,
-      ),
+      ).remainingSeconds,
       endsAt: null,
     };
   }
@@ -191,23 +185,23 @@ export function panelTimerTogglePatch({
   if (panelStatus === "running") {
     const patch: Partial<RuntimeState> = {
       panelStatus: "paused",
-      panelRemainingSeconds: remainingNow(
+      panelRemainingSeconds: readTimerClock(
         panelStatus,
         runtime.panelEndsAt,
         runtime.panelRemainingSeconds ?? panelDuration,
         now,
-      ),
+      ).remainingSeconds,
       panelEndsAt: null,
     };
 
     if (runtime.status === "running") {
       patch.status = "paused";
-      patch.remainingSeconds = remainingNow(
+      patch.remainingSeconds = readTimerClock(
         runtime.status,
         runtime.endsAt,
         runtime.remainingSeconds,
         now,
-      );
+      ).remainingSeconds;
       patch.endsAt = null;
     }
 
@@ -345,9 +339,11 @@ export function LiveConsole({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const runtime = event.runtime;
   const [displaySeconds, setDisplaySeconds] = useState(runtime.remainingSeconds);
+  const [speakerAutoStopped, setSpeakerAutoStopped] = useState(false);
   const [panelDisplaySeconds, setPanelDisplaySeconds] = useState(
     runtime.panelRemainingSeconds ?? 0,
   );
+  const [panelAutoStopped, setPanelAutoStopped] = useState(false);
   const [copied, setCopied] = useState(false);
   const [zoomCopied, setZoomCopied] = useState(false);
   const [confirmingEnd, setConfirmingEnd] = useState(false);
@@ -433,8 +429,8 @@ export function LiveConsole({
     : -1;
   const viewerPath = `/live/${event.viewerToken}`;
   const isEnded = runtime.status === "ended" || event.status === "completed";
-  const isRunning = runtime.status === "running";
-  const isPanelRunning = runtime.panelStatus === "running";
+  const isRunning = runtime.status === "running" && !speakerAutoStopped;
+  const isPanelRunning = runtime.panelStatus === "running" && !panelAutoStopped;
 
   /**
    * The two numbers an operator actually needs: how much programme is left,
@@ -446,14 +442,20 @@ export function LiveConsole({
 
   useEffect(() => {
     const tick = () => {
-      setDisplaySeconds(remainingNow(runtime.status, runtime.endsAt, runtime.remainingSeconds));
-      setPanelDisplaySeconds(
-        remainingNow(
-          runtime.panelStatus ?? undefined,
-          runtime.panelEndsAt,
-          runtime.panelRemainingSeconds ?? (isPanel ? currentItem.durationSeconds : 0),
-        ),
+      const speakerClock = readTimerClock(
+        runtime.status,
+        runtime.endsAt,
+        runtime.remainingSeconds,
       );
+      const panelClock = readTimerClock(
+        runtime.panelStatus,
+        runtime.panelEndsAt,
+        runtime.panelRemainingSeconds ?? (isPanel ? currentItem.durationSeconds : 0),
+      );
+      setDisplaySeconds(speakerClock.remainingSeconds);
+      setSpeakerAutoStopped(speakerClock.autoStopped);
+      setPanelDisplaySeconds(panelClock.remainingSeconds);
+      setPanelAutoStopped(panelClock.autoStopped);
     };
     queueMicrotask(tick);
     const interval = window.setInterval(tick, 200);
@@ -515,6 +517,39 @@ export function LiveConsole({
     }));
   }
 
+  /*
+   * The shared clock freezes without a browser write, so audience and Zoom views
+   * are safe even while the controller is closed. When a controller is present,
+   * persist that derived stop once so the durable event no longer says "running".
+   */
+  useEffect(() => {
+    const stopSpeaker = speakerAutoStopped && runtime.status === "running";
+    const stopPanel = panelAutoStopped && runtime.panelStatus === "running";
+    if (!stopSpeaker && !stopPanel) return;
+
+    mutateEvent((currentEvent) => ({
+      ...currentEvent,
+      runtime: {
+        ...currentEvent.runtime,
+        ...(stopSpeaker
+          ? {
+              status: "paused" as const,
+              remainingSeconds: AUTO_STOPPED_REMAINING_SECONDS,
+              endsAt: null,
+            }
+          : {}),
+        ...(stopPanel
+          ? {
+              panelStatus: "paused" as const,
+              panelRemainingSeconds: AUTO_STOPPED_REMAINING_SECONDS,
+              panelEndsAt: null,
+            }
+          : {}),
+        updatedAt: Date.now(),
+      },
+    }));
+  }, [mutateEvent, panelAutoStopped, runtime.panelStatus, runtime.status, speakerAutoStopped]);
+
   function toggleSpeakerTimer() {
     setRuntime(
       speakerTimerTogglePatch({
@@ -566,11 +601,11 @@ export function LiveConsole({
         targetItem.kind !== "panel"
           ? null
           : stayingInPanel
-            ? remainingNow(
+            ? readTimerClock(
                 runtime.panelStatus ?? undefined,
                 runtime.panelEndsAt,
                 runtime.panelRemainingSeconds ?? currentItem.durationSeconds,
-              )
+              ).remainingSeconds
             : targetItem.durationSeconds,
       panelEndsAt:
         targetItem.kind === "panel" && stayingInPanel ? runtime.panelEndsAt ?? null : null,
@@ -588,18 +623,19 @@ export function LiveConsole({
     });
     if (panel) {
       const adjusted =
-        remainingNow(
+        readTimerClock(
           runtime.panelStatus ?? undefined,
           runtime.panelEndsAt,
           runtime.panelRemainingSeconds,
-        ) + seconds;
+        ).remainingSeconds + seconds;
       setRuntime({
         panelRemainingSeconds: adjusted,
         panelEndsAt: runtime.panelStatus === "running" ? Date.now() + adjusted * 1000 : null,
       });
     } else {
       const adjusted =
-        remainingNow(runtime.status, runtime.endsAt, runtime.remainingSeconds) + seconds;
+        readTimerClock(runtime.status, runtime.endsAt, runtime.remainingSeconds).remainingSeconds +
+        seconds;
       setRuntime({
         remainingSeconds: adjusted,
         endsAt: runtime.status === "running" ? Date.now() + adjusted * 1000 : null,
@@ -1315,11 +1351,13 @@ export function LiveConsole({
       <div className={cn("mx-auto grid w-[min(1420px,100%)] items-start gap-4 transition-[grid-template-columns] duration-200", isFocused ? "max-w-[760px] grid-cols-1" : "grid-cols-[380px_minmax(0,1fr)] max-lg:grid-cols-[300px_minmax(0,1fr)] max-md:grid-cols-1")}>
         <section className={cn("sticky top-24 flex flex-col gap-3 rounded-panel border border-line bg-white/95 p-6 shadow-[0_12px_34px_rgba(26,22,42,0.045)] max-md:static", isFocused && "static")}>
           <div className="flex items-center justify-between gap-2.5">
-            <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold", isEnded ? "bg-violet-soft text-violet-dark" : isRunning ? "bg-success-soft text-success" : runtime.status === "paused" ? "bg-caution-soft text-caution" : "bg-surface-sunken text-text-muted")}>
+            <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold", isEnded ? "bg-violet-soft text-violet-dark" : speakerAutoStopped ? "bg-over-soft text-over" : isRunning ? "bg-success-soft text-success" : runtime.status === "paused" ? "bg-caution-soft text-caution" : "bg-surface-sunken text-text-muted")}>
               <span className="size-1.5 rounded-full bg-current" />
               {isEnded
                 ? "Ended"
-                : isRunning
+                : speakerAutoStopped
+                  ? "Auto-stopped"
+                  : isRunning
                   ? "Running"
                   : runtime.status === "paused"
                     ? "Paused"
@@ -1360,10 +1398,16 @@ export function LiveConsole({
                 >
                   {formatTimer(displaySeconds)}
                 </strong>
+                {speakerAutoStopped && (
+                  <p role="status" className="mb-2.5 text-[12px] font-semibold text-over">
+                    {formatDuration(MAX_OVERTIME_SECONDS)} overtime limit reached. Reset or add
+                    time to continue.
+                  </p>
+                )}
                 <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
-                <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-violet text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark" onClick={toggleSpeakerTimer}>
+                <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-violet text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark disabled:cursor-not-allowed disabled:opacity-45" onClick={toggleSpeakerTimer} disabled={speakerAutoStopped}>
                   {isRunning ? <Pause size={14} /> : <Play size={14} />}
-                  {isRunning ? "Pause speaker" : "Start speaker"}
+                  {speakerAutoStopped ? "Auto-stopped" : isRunning ? "Pause speaker" : "Start speaker"}
                 </button>
                 <TimeNudge label={`Adjust time for ${current.speaker}`} onAdjust={adjustSpeaker} />
               </div>
@@ -1388,10 +1432,15 @@ export function LiveConsole({
                 >
                   {formatTimer(panelDisplaySeconds)}
                 </strong>
+                {panelAutoStopped && (
+                  <p role="status" className="mb-2.5 text-[12px] font-semibold text-over">
+                    {formatDuration(MAX_OVERTIME_SECONDS)} overtime limit reached.
+                  </p>
+                )}
                 <TimerProgress label="Panel progress" ratio={panelProgress} tone={panelTone} />
-                <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-line bg-white text-[13px] font-semibold transition-colors duration-150 hover:bg-surface-hover" onClick={togglePanelTimer}>
+                <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-line bg-white text-[13px] font-semibold transition-colors duration-150 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45" onClick={togglePanelTimer} disabled={panelAutoStopped}>
                   {isPanelRunning ? <Pause size={14} /> : <Play size={14} />}
-                  {isPanelRunning ? "Pause panel" : "Start panel"}
+                  {panelAutoStopped ? "Panel auto-stopped" : isPanelRunning ? "Pause panel" : "Start panel"}
                 </button>
                 <TimeNudge label="Adjust the panel total" onAdjust={adjustPanel} />
               </div>
@@ -1418,10 +1467,16 @@ export function LiveConsole({
               >
                 {formatTimer(displaySeconds)}
               </strong>
+              {speakerAutoStopped && (
+                <p role="status" className="mb-3 text-[12px] font-semibold text-over">
+                  {formatDuration(MAX_OVERTIME_SECONDS)} overtime limit reached. Reset or add time
+                  to continue.
+                </p>
+              )}
               <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
-              <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-violet text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark" onClick={toggleSpeakerTimer}>
+              <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-violet text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark disabled:cursor-not-allowed disabled:opacity-45" onClick={toggleSpeakerTimer} disabled={speakerAutoStopped}>
                 {isRunning ? <Pause size={14} /> : <Play size={14} />}
-                {isRunning ? "Pause timer" : "Start timer"}
+                {speakerAutoStopped ? "Auto-stopped" : isRunning ? "Pause timer" : "Start timer"}
               </button>
             </div>
           )}

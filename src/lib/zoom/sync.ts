@@ -1,4 +1,5 @@
 import { flattenSegments, timerTone, type TimerTone } from "@/lib/format";
+import { readTimerClock } from "@/lib/timer-clock";
 import type { TimerEvent } from "@/lib/types";
 
 /*
@@ -60,6 +61,7 @@ export type SourceTimer = {
   label: string;
   phase: TimerPhase;
   remainingSeconds: number;
+  autoStopped: boolean;
   /** Neutral/yellow/red urgency for the compact contour. */
   tone: ZoomIndicatorTone;
   /** `RuntimeState.updatedAt`; advances on every control-room write. */
@@ -135,8 +137,14 @@ export function sourceTimerFromEvent(event: TimerEvent, now: number): SourceTime
   const index = Math.min(Math.max(0, runtime.segmentIndex), segments.length - 1);
   const segment = segments[index];
 
+  const clock = readTimerClock(
+    runtime.status,
+    runtime.endsAt,
+    runtime.remainingSeconds,
+    now,
+  );
   const phase: TimerPhase =
-    event.status === "completed" || runtime.status === "ended"
+    clock.autoStopped || event.status === "completed" || runtime.status === "ended"
       ? "finished"
       : runtime.status === "running"
         ? "running"
@@ -144,16 +152,14 @@ export function sourceTimerFromEvent(event: TimerEvent, now: number): SourceTime
           ? "paused"
           : "idle";
 
-  const remainingSeconds =
-    runtime.status === "running" && runtime.endsAt
-      ? remainingFromDeadline(runtime.endsAt, now)
-      : runtime.remainingSeconds;
+  const remainingSeconds = clock.remainingSeconds;
 
   return {
     segmentId: segment.id,
     label: shortLabel(segment.speaker),
     phase,
     remainingSeconds,
+    autoStopped: clock.autoStopped,
     tone: zoomIndicatorTone(remainingSeconds, segment.durationSeconds),
     revision: runtime.updatedAt,
   };

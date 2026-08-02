@@ -189,8 +189,9 @@ export function ZoomTimer() {
 
   const insideZoom = environment.availability !== "outside-zoom";
   const isLive = syncing && Boolean(published);
-  const phaseLabel =
-    source?.phase === "running"
+  const phaseLabel = source?.autoStopped
+    ? "Auto-stopped"
+    : source?.phase === "running"
       ? "Running"
       : source?.phase === "paused"
         ? "Paused"

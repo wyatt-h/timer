@@ -19,6 +19,7 @@ function source(overrides: Partial<SourceTimer> = {}): SourceTimer {
     label: "Maya Chen",
     phase: "running",
     remainingSeconds: 300,
+    autoStopped: false,
     tone: "normal",
     revision: 10,
     ...overrides,
@@ -126,6 +127,17 @@ describe("remaining seconds from authoritative state", () => {
 
     expect(result?.remainingSeconds).toBe(-12);
     expect(result?.tone).toBe("overtime");
+  });
+
+  it("finishes and freezes an abandoned timer at fifteen minutes overtime", () => {
+    const result = sourceTimerFromEvent(timerEvent({ endsAt: NOW - 3600_000 }), NOW);
+
+    expect(result).toMatchObject({
+      phase: "finished",
+      remainingSeconds: -900,
+      autoStopped: true,
+      tone: "overtime",
+    });
   });
 
   it("uses the shared 30-second warning threshold for the contour", () => {
@@ -323,6 +335,16 @@ describe("transitions", () => {
   it("removes the indicator when the event ends", () => {
     const result = plan({
       source: source({ phase: "finished", revision: 11 }),
+      published: published(),
+    });
+
+    expect(result.command).toEqual({ kind: "remove" });
+    expect(result.published).toBeNull();
+  });
+
+  it("removes the indicator when the timer auto-stops", () => {
+    const result = plan({
+      source: source({ phase: "finished", remainingSeconds: -900, autoStopped: true }),
       published: published(),
     });
 

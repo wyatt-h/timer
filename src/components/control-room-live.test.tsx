@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { LiveConsole } from "@/components/control-room";
 import { flattenSegments } from "@/lib/format";
@@ -37,6 +37,48 @@ describe("live run-of-show drafts", () => {
     expect(clock).not.toHaveClass("text-success");
     expect(clock.parentElement).toHaveClass("bg-surface-sunken");
     expect(clock.parentElement).not.toHaveClass("bg-success-soft");
+  });
+
+  it("freezes and persists a timer abandoned beyond the overtime limit", async () => {
+    const event = makeEvent("Friday Night");
+    event.status = "live";
+    event.runtime = {
+      ...event.runtime,
+      status: "running",
+      remainingSeconds: 60,
+      endsAt: Date.now() - 16 * 60 * 1000,
+    };
+    const update = vi.fn<(updater: (current: TimerEvent) => TimerEvent) => void>();
+
+    render(
+      <LiveConsole
+        event={event}
+        loginName="friday-night"
+        segments={flattenSegments(event)}
+        update={update}
+        saveState="idle"
+        onRetrySave={vi.fn()}
+        onDiscardLocal={vi.fn(async () => ({ ok: true }))}
+        onKeepLocal={vi.fn(async () => ({ ok: true }))}
+        onFlushSaves={vi.fn()}
+        onDelete={vi.fn(async () => ({ ok: true }))}
+        onSignOut={vi.fn(async () => ({ ok: true }))}
+        conflictResolution={null}
+      />,
+    );
+
+    expect(await screen.findByText("−15:00")).toBeInTheDocument();
+    expect(screen.getAllByText("Auto-stopped")).toHaveLength(2);
+    expect(screen.getByText(/15 min overtime limit reached/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auto-stopped" })).toBeDisabled();
+
+    await waitFor(() => expect(update).toHaveBeenCalledOnce());
+    const persisted = update.mock.calls[0][0](event);
+    expect(persisted.runtime).toMatchObject({
+      status: "paused",
+      remainingSeconds: -900,
+      endsAt: null,
+    });
   });
 
   it("does not synchronize typing until Save changes is pressed", () => {

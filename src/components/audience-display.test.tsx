@@ -4,6 +4,7 @@ import { AudienceDisplay } from "@/components/audience-display";
 
 const audienceTestState = vi.hoisted(() => ({
   timerFinished: false,
+  abandoned: false,
   play: vi.fn(),
   unlock: vi.fn(),
   disable: vi.fn(),
@@ -40,10 +41,14 @@ vi.mock("@/lib/store", () => ({
         },
       ],
       runtime: {
-        status: audienceTestState.timerFinished ? "running" : "paused",
+        status: audienceTestState.timerFinished || audienceTestState.abandoned ? "running" : "paused",
         segmentIndex: 0,
         remainingSeconds: audienceTestState.timerFinished ? 0 : 10 * 60,
-        endsAt: audienceTestState.timerFinished ? 1 : null,
+        endsAt: audienceTestState.abandoned
+          ? Date.now() - 16 * 60 * 1000
+          : audienceTestState.timerFinished
+            ? Date.now() - 1000
+            : null,
         panelStatus: null,
         panelRemainingSeconds: null,
         panelEndsAt: null,
@@ -77,6 +82,7 @@ vi.mock("@/lib/use-wake-lock", () => ({
 describe("AudienceDisplay", () => {
   beforeEach(() => {
     audienceTestState.timerFinished = false;
+    audienceTestState.abandoned = false;
     audienceTestState.remoteSoundEnabled = true;
     audienceTestState.remoteSpeakerMuted = false;
     audienceTestState.isReady = true;
@@ -101,6 +107,15 @@ describe("AudienceDisplay", () => {
     const clock = screen.getByText("10:00");
     expect(clock).toHaveClass("text-[#f8f7fc]");
     expect(clock).not.toHaveClass("text-[#4ade80]");
+  });
+
+  it("freezes an abandoned timer and explains the automatic stop", async () => {
+    audienceTestState.abandoned = true;
+    render(<AudienceDisplay />);
+
+    expect(await screen.findByText("−15:00")).toBeInTheDocument();
+    expect(screen.getByText("Auto-stopped after 15 min overtime")).toBeInTheDocument();
+    expect(screen.getByText("Auto-stopped", { selector: "footer *" })).toBeInTheDocument();
   });
 
   it("lets the audience display turn its enabled sound back off", () => {

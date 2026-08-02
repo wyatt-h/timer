@@ -17,6 +17,7 @@ import {
   describeTimer,
   elapsedRatio,
   flattenSegments,
+  formatDuration,
   formatTimer,
   panelLabel,
   timerTone,
@@ -31,16 +32,7 @@ import {
 } from "@/lib/use-chime";
 import { cn } from "@/lib/utils";
 import { useWakeLock } from "@/lib/use-wake-lock";
-
-/** Countdowns keep running past zero so the room can see the overrun. */
-function liveSeconds(
-  isRunning: boolean,
-  endsAt: number | null | undefined,
-  fallback: number | null | undefined,
-) {
-  if (isRunning && endsAt) return (endsAt - Date.now()) / 1000;
-  return fallback ?? 0;
-}
+import { MAX_OVERTIME_SECONDS, readTimerClock } from "@/lib/timer-clock";
 
 const AUDIENCE_BACKGROUND = {
   backgroundColor: "#0c0c10",
@@ -62,7 +54,9 @@ export function AudienceDisplay() {
   const segments = useMemo(() => (event ? flattenSegments(event) : []), [event]);
   const runtime = event?.runtime;
   const [remaining, setRemaining] = useState(runtime?.remainingSeconds ?? 0);
+  const [speakerAutoStopped, setSpeakerAutoStopped] = useState(false);
   const [panelRemaining, setPanelRemaining] = useState(runtime?.panelRemainingSeconds ?? 0);
+  const [panelAutoStopped, setPanelAutoStopped] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { play, disable, isReady } = useChime();
   const [chimePreset, setChimePreset] = useState<ChimePreset>("feather");
@@ -138,19 +132,23 @@ export function AudienceDisplay() {
         segments[Math.min(runtime.segmentIndex, Math.max(0, segments.length - 1))];
       const liveItem = event?.agenda.find((item) => item.id === liveSegment?.agendaItemId);
 
-      const speakerSeconds = liveSeconds(
-        runtime.status === "running",
+      const speakerClock = readTimerClock(
+        runtime.status,
         runtime.endsAt,
         runtime.remainingSeconds,
       );
-      const panelSeconds = liveSeconds(
-        runtime.panelStatus === "running",
+      const panelClock = readTimerClock(
+        runtime.panelStatus,
         runtime.panelEndsAt,
         runtime.panelRemainingSeconds ??
           (liveItem?.kind === "panel" ? liveItem.durationSeconds : 0),
       );
+      const speakerSeconds = speakerClock.remainingSeconds;
+      const panelSeconds = panelClock.remainingSeconds;
       setRemaining(speakerSeconds);
+      setSpeakerAutoStopped(speakerClock.autoStopped);
       setPanelRemaining(panelSeconds);
+      setPanelAutoStopped(panelClock.autoStopped);
 
       // Only a running clock can reach zero; a paused one sitting below zero
       // must not re-alert on every tick.
@@ -252,8 +250,10 @@ export function AudienceDisplay() {
     CHIME_PRESETS.find((preset) => preset.id === chimePreset) ??
     CHIME_PRESETS[0];
 
-  const stateLabel = isPaused
-    ? "Paused"
+  const stateLabel = speakerAutoStopped
+    ? `Auto-stopped after ${formatDuration(MAX_OVERTIME_SECONDS)} overtime`
+    : isPaused
+      ? "Paused"
     : isEnded
       ? "Event complete"
       : isPanel
@@ -443,7 +443,9 @@ export function AudienceDisplay() {
 
         {isPanel && (
           <div className="rounded-card border border-white/9 bg-white/4 px-[clamp(1.25rem,4vw,2.5rem)] py-3.5 text-center">
-            <span className="mb-2 block text-[clamp(0.5625rem,1vw,0.75rem)] font-bold tracking-[0.12em] text-[#8f8e99] uppercase">Panel remaining</span>
+            <span className="mb-2 block text-[clamp(0.5625rem,1vw,0.75rem)] font-bold tracking-[0.12em] text-[#8f8e99] uppercase">
+              {panelAutoStopped ? "Panel auto-stopped" : "Panel remaining"}
+            </span>
             <strong className={cn("tabular block font-mono text-[clamp(1.875rem,4.5vw,3.875rem)] leading-[0.9] font-medium tracking-[-0.06em] text-[#f8f7fc] transition-colors duration-300", panelTone === "caution" && "text-[#ffb547]", panelTone === "critical" && "text-[#ff7a70]")}>{formatTimer(panelRemaining)}</strong>
           </div>
         )}
@@ -476,8 +478,14 @@ export function AudienceDisplay() {
           <strong className="mt-1 block font-medium text-[#aaa9b3]">{next ? next.speaker : event.name}</strong>
         </div>
         <span className="inline-flex items-center gap-2">
-          <span aria-hidden className="size-1.5 rounded-full bg-[#4ade80]" />
-          Synced live
+          <span
+            aria-hidden
+            className={cn(
+              "size-1.5 rounded-full",
+              speakerAutoStopped ? "bg-[#ff7a70]" : "bg-[#4ade80]",
+            )}
+          />
+          {speakerAutoStopped ? "Auto-stopped" : "Synced live"}
         </span>
       </footer>
     </main>
