@@ -194,7 +194,7 @@ describe("live run-of-show drafts", () => {
     expect(event.runtime.segmentIndex).toBe(1);
   });
 
-  it("resets the current topic to its full duration and pauses it", () => {
+  it("confirms before resetting the current topic to its full duration", () => {
     const event = makeEvent("Friday Night");
     event.status = "live";
     event.runtime = {
@@ -224,6 +224,12 @@ describe("live run-of-show drafts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Reset current topic" }));
 
+    expect(update).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Reset the current topic?" })).toBeInTheDocument();
+    expect(screen.getByText(/pauses the timer for every connected display/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset topic" }));
+
     expect(update).toHaveBeenCalledOnce();
     const reset = update.mock.calls[0][0](event);
     expect(reset.runtime).toMatchObject({
@@ -234,5 +240,43 @@ describe("live run-of-show drafts", () => {
       panelRemainingSeconds: null,
       panelEndsAt: null,
     });
+  });
+
+  it("pulses and announces timer adjustments", () => {
+    const event = makeEvent("Friday Night");
+    event.status = "live";
+    const update = vi.fn<(updater: (current: TimerEvent) => TimerEvent) => void>();
+
+    render(
+      <LiveConsole
+        event={event}
+        loginName="friday-night"
+        segments={flattenSegments(event)}
+        update={update}
+        saveState="idle"
+        onRetrySave={vi.fn()}
+        onDiscardLocal={vi.fn(async () => ({ ok: true }))}
+        onKeepLocal={vi.fn(async () => ({ ok: true }))}
+        onFlushSaves={vi.fn()}
+        onDelete={vi.fn(async () => ({ ok: true }))}
+        onSignOut={vi.fn(async () => ({ ok: true }))}
+        conflictResolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle("Add fifteen seconds"));
+    expect(screen.getByText("Added 15 seconds to the speaker timer.")).toHaveAttribute(
+      "role",
+      "status",
+    );
+    expect(screen.getByText("10:00")).toHaveAttribute("data-adjustment", "added");
+
+    fireEvent.click(screen.getByTitle("Remove fifteen seconds"));
+    expect(screen.getByText("Removed 15 seconds from the speaker timer.")).toHaveAttribute(
+      "role",
+      "status",
+    );
+    expect(screen.getByText("10:00")).toHaveAttribute("data-adjustment", "removed");
+    expect(update).toHaveBeenCalledTimes(2);
   });
 });

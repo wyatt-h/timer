@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { CircleCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   loginNameProblem,
@@ -48,12 +50,35 @@ export function CredentialsFields({
   showErrors: boolean;
   disabled?: boolean;
 }) {
+  const [loginNameNotice, setLoginNameNotice] = useState("");
   const loginNameError = showErrors ? loginNameProblem(draft.loginName) : null;
   const passwordError = showErrors ? passwordProblem(draft.password) : null;
   const confirmError =
     showErrors && draft.password !== draft.confirmPassword
       ? "The two passwords do not match."
       : null;
+  const passwordsMatch =
+    draft.confirmPassword.length > 0 &&
+    passwordProblem(draft.password) === null &&
+    draft.password === draft.confirmPassword;
+
+  function changeLoginName(value: string) {
+    const sanitized = sanitizeLoginNameInput(value);
+    if (!value) {
+      setLoginNameNotice("");
+    } else if (sanitized !== value) {
+      const changedCase = value.toLowerCase() !== value;
+      const removedCharacters = sanitized !== value.toLowerCase();
+      setLoginNameNotice(
+        changedCase && removedCharacters
+          ? "Converted to lowercase and removed unsupported characters."
+          : changedCase
+            ? "Converted to lowercase."
+            : "Removed unsupported characters.",
+      );
+    }
+    onChange({ ...draft, loginName: sanitized });
+  }
 
   return (
     <div className="grid gap-4">
@@ -64,12 +89,13 @@ export function CredentialsFields({
         disabled={disabled}
         required
         autoComplete="username"
-        supportingText="Use lowercase letters, numbers, and dashes only. No spaces or special characters."
+        supportingText={
+          loginNameNotice ||
+          "Use lowercase letters, numbers, and dashes only. No spaces or special characters."
+        }
         aria-invalid={Boolean(loginNameError)}
         errorText={loginNameError ?? ""}
-        onValueChange={(loginName) =>
-          onChange({ ...draft, loginName: sanitizeLoginNameInput(loginName) })
-        }
+        onValueChange={changeLoginName}
       />
       <Input
         id="controller-password"
@@ -96,6 +122,15 @@ export function CredentialsFields({
         errorText={confirmError ?? ""}
         onValueChange={(confirmPassword) => onChange({ ...draft, confirmPassword })}
       />
+      {passwordsMatch && (
+        <p
+          role="status"
+          className="-mt-2 flex items-center gap-1.5 text-[12px] font-medium text-success"
+        >
+          <CircleCheck size={14} aria-hidden />
+          Passwords match
+        </p>
+      )}
       <p className="text-[12px] leading-relaxed text-text-subtle">
         This lowercase login name and password open the event on any device. There is no account,
         so choose credentials you can share with the people running it.

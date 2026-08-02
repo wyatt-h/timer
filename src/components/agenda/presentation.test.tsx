@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { render as baseRender, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PanelFields } from "@/components/agenda/panel-fields";
 import { SortableAgendaItem } from "@/components/agenda/sortable-agenda-item";
 import { SpeakerFields } from "@/components/agenda/speaker-fields";
 import type { AgendaItemValues } from "@/lib/agenda-schema";
@@ -15,7 +17,7 @@ import type { AgendaItemValues } from "@/lib/agenda-schema";
  */
 /* Tooltip triggers require their provider, which the editor supplies. */
 function render(ui: ReactElement) {
-  return baseRender(<TooltipProvider>{ui}</TooltipProvider>);
+  return baseRender(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
 }
 
 function styled(element: Element | null) {
@@ -138,5 +140,36 @@ describe("agenda item presentation", () => {
     );
     const card = screen.getByRole("listitem");
     expect(within(card).getByText("4")).toBeInTheDocument();
+  });
+
+  it("explains what Apply to all changes", async () => {
+    const user = userEvent.setup();
+    render(
+      <PanelFields
+        itemId="panel-1"
+        host="Ana"
+        durationMinutes={30}
+        defaultPanelistMinutes={5}
+        panelists={[{ id: "p1", name: "Maya", durationMinutes: 5 }]}
+        usedMinutes={5}
+        remainingMinutes={25}
+        errors={{}}
+        onHostChange={() => {}}
+        onDurationChange={() => {}}
+        onDefaultMinutesChange={() => {}}
+        onPanelistNameChange={() => {}}
+        onPanelistDurationChange={() => {}}
+        onAddPanelist={() => {}}
+        onRemovePanelist={() => {}}
+        onMovePanelist={() => {}}
+        onApplyToAll={() => {}}
+        onBlur={() => {}}
+      />,
+    );
+
+    await user.hover(screen.getByRole("button", { name: "Apply to all" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Apply this duration to all current panelists",
+    );
   });
 });

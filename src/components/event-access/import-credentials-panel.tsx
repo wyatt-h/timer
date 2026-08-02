@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, ArrowLeft } from "lucide-react";
+import { AlertCircle, ArrowLeft, CircleCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,8 @@ export function ImportCredentialsPanel({
   const [created, setCreated] = useState<ImportedCredential[] | null>(null);
   const passwordError = touched ? passwordProblem(password) : null;
   const confirmError = touched && password !== confirmPassword ? "The two passwords do not match." : null;
+  const passwordsMatch =
+    confirmPassword.length > 0 && passwordProblem(password) === null && password === confirmPassword;
 
   async function submit() {
     setTouched(true);
@@ -194,6 +196,12 @@ export function ImportCredentialsPanel({
           errorText={confirmError ?? ""}
           onValueChange={setConfirmPassword}
         />
+        {passwordsMatch && (
+          <p role="status" className="-mt-2 flex items-center gap-1.5 text-[12px] font-medium text-success">
+            <CircleCheck size={14} aria-hidden />
+            Passwords match
+          </p>
+        )}
       </div>
 
       <div aria-live="polite">

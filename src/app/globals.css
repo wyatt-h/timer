@@ -118,6 +118,22 @@
   }
 }
 
+@keyframes timer-adjust-added {
+  50% {
+    color: var(--color-success);
+    transform: scale(1.045);
+    text-shadow: 0 0 18px rgb(14 111 70 / 24%);
+  }
+}
+
+@keyframes timer-adjust-removed {
+  50% {
+    color: var(--color-over);
+    transform: scale(1.045);
+    text-shadow: 0 0 18px rgb(192 45 45 / 24%);
+  }
+}
+
 @layer components {
   /*
    * Google Material Web owns the label motion, notch and state transitions.

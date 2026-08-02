@@ -62,6 +62,24 @@ import { useThrottledAnnouncement } from "@/lib/use-throttled-announcement";
 import { formatZoomToken, makeZoomToken } from "@/lib/zoom/token";
 import type { AgendaItem, TimerEvent, RuntimeState, Speaker, TimerSegment } from "@/lib/types";
 
+type AdjustmentFeedback = {
+  id: number;
+  target: "speaker" | "panel";
+  direction: "added" | "removed";
+  message: string;
+};
+
+function adjustmentMessage(seconds: number, target: "speaker" | "panel") {
+  const absolute = Math.abs(seconds);
+  const amount =
+    absolute % 60 === 0
+      ? `${absolute / 60} minute${absolute === 60 ? "" : "s"}`
+      : `${absolute} seconds`;
+  return `${seconds > 0 ? "Added" : "Removed"} ${amount} ${
+    seconds > 0 ? "to" : "from"
+  } the ${target} timer.`;
+}
+
 /** Countdowns keep running past zero, so nothing here is clamped. */
 function remainingNow(
   status: RuntimeState["status"] | undefined,
@@ -333,6 +351,9 @@ export function LiveConsole({
   const [copied, setCopied] = useState(false);
   const [zoomCopied, setZoomCopied] = useState(false);
   const [confirmingEnd, setConfirmingEnd] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const [adjustmentFeedback, setAdjustmentFeedback] = useState<AdjustmentFeedback | null>(null);
+  const adjustmentSequence = useRef(0);
   const [projectedFinish, setProjectedFinish] = useState<number | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [agendaDraft, setAgendaDraft] = useState(event.agenda);
@@ -557,6 +578,14 @@ export function LiveConsole({
   }
 
   function adjust(seconds: number, panel = false) {
+    const target = panel ? "panel" : "speaker";
+    adjustmentSequence.current += 1;
+    setAdjustmentFeedback({
+      id: adjustmentSequence.current,
+      target,
+      direction: seconds > 0 ? "added" : "removed",
+      message: adjustmentMessage(seconds, target),
+    });
     if (panel) {
       const adjusted =
         remainingNow(
@@ -1316,7 +1345,19 @@ export function LiveConsole({
                     {current.speaker}
                   </span>
                 </div>
-                <strong className={cn("tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-ink", speakerTone === "caution" && "text-caution", speakerTone === "critical" && "text-over")}>
+                <strong
+                  key={`speaker-${adjustmentFeedback?.target === "speaker" ? adjustmentFeedback.id : 0}`}
+                  data-adjustment={adjustmentFeedback?.target === "speaker" ? adjustmentFeedback.direction : undefined}
+                  className={cn(
+                    "tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-ink",
+                    speakerTone === "caution" && "text-caution",
+                    speakerTone === "critical" && "text-over",
+                    adjustmentFeedback?.target === "speaker" &&
+                      (adjustmentFeedback.direction === "added"
+                        ? "motion-safe:animate-[timer-adjust-added_320ms_var(--ease-out-quart)]"
+                        : "motion-safe:animate-[timer-adjust-removed_320ms_var(--ease-out-quart)]"),
+                  )}
+                >
                   {formatTimer(displaySeconds)}
                 </strong>
                 <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
@@ -1332,7 +1373,19 @@ export function LiveConsole({
                     Panel remaining
                   </span>
                 </div>
-                <strong className={cn("tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-ink", panelTone === "caution" && "text-caution", panelTone === "critical" && "text-over")}>
+                <strong
+                  key={`panel-${adjustmentFeedback?.target === "panel" ? adjustmentFeedback.id : 0}`}
+                  data-adjustment={adjustmentFeedback?.target === "panel" ? adjustmentFeedback.direction : undefined}
+                  className={cn(
+                    "tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-ink",
+                    panelTone === "caution" && "text-caution",
+                    panelTone === "critical" && "text-over",
+                    adjustmentFeedback?.target === "panel" &&
+                      (adjustmentFeedback.direction === "added"
+                        ? "motion-safe:animate-[timer-adjust-added_320ms_var(--ease-out-quart)]"
+                        : "motion-safe:animate-[timer-adjust-removed_320ms_var(--ease-out-quart)]"),
+                  )}
+                >
                   {formatTimer(panelDisplaySeconds)}
                 </strong>
                 <TimerProgress label="Panel progress" ratio={panelProgress} tone={panelTone} />
@@ -1350,7 +1403,19 @@ export function LiveConsole({
                   {current.speaker}
                 </span>
               </div>
-              <strong className={cn("tabular mb-3 block font-mono text-[60px] leading-none font-medium tracking-[-0.06em] text-ink", speakerTone === "caution" && "text-caution", speakerTone === "critical" && "text-over")}>
+              <strong
+                key={`speaker-${adjustmentFeedback?.target === "speaker" ? adjustmentFeedback.id : 0}`}
+                data-adjustment={adjustmentFeedback?.target === "speaker" ? adjustmentFeedback.direction : undefined}
+                className={cn(
+                  "tabular mb-3 block font-mono text-[60px] leading-none font-medium tracking-[-0.06em] text-ink",
+                  speakerTone === "caution" && "text-caution",
+                  speakerTone === "critical" && "text-over",
+                  adjustmentFeedback?.target === "speaker" &&
+                    (adjustmentFeedback.direction === "added"
+                      ? "motion-safe:animate-[timer-adjust-added_320ms_var(--ease-out-quart)]"
+                      : "motion-safe:animate-[timer-adjust-removed_320ms_var(--ease-out-quart)]"),
+                )}
+              >
                 {formatTimer(displaySeconds)}
               </strong>
               <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
@@ -1381,7 +1446,7 @@ export function LiveConsole({
           <button
             type="button"
             className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-control border border-line bg-white px-3 text-[12px] font-semibold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark"
-            onClick={resetCurrent}
+            onClick={() => setConfirmingReset(true)}
           >
             <RotateCcw size={13} aria-hidden />
             Reset current topic
@@ -1572,6 +1637,18 @@ export function LiveConsole({
       </div>
 
       <ConfirmDialog
+        open={confirmingReset}
+        title="Reset the current topic?"
+        body={`This returns ${current.speaker} to ${formatTimer(current.durationSeconds)} and pauses the timer for every connected display.`}
+        confirmLabel="Reset topic"
+        onConfirm={() => {
+          setConfirmingReset(false);
+          resetCurrent();
+        }}
+        onCancel={() => setConfirmingReset(false)}
+      />
+
+      <ConfirmDialog
         open={confirmingDelete}
         title={`Delete ${event.name}?`}
         body="The run of show, its audience link, and its controller credentials are removed for everyone. This cannot be undone."
@@ -1599,6 +1676,12 @@ export function LiveConsole({
         onConfirm={endEvent}
         onCancel={() => setConfirmingEnd(false)}
       />
+
+      {adjustmentFeedback && (
+        <span key={adjustmentFeedback.id} className="sr-only" role="status" aria-live="polite">
+          {adjustmentFeedback.message}
+        </span>
+      )}
     </main>
   );
 }

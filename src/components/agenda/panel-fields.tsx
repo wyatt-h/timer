@@ -20,6 +20,7 @@ import { Plus, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DurationField, FieldError } from "@/components/agenda/fields";
 import { SortablePanelistRow } from "@/components/agenda/sortable-panelist-row";
 import type { PanelistValues } from "@/lib/agenda-schema";
@@ -148,15 +149,22 @@ export function PanelFields({
                 onChange={onDefaultMinutesChange}
                 onBlur={onBlur}
               />
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={onApplyToAll}
-                disabled={panelists.length === 0}
-              >
-                Apply to all
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={onApplyToAll}
+                    disabled={panelists.length === 0}
+                  >
+                    Apply to all
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  Apply this duration to all current panelists
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
 
