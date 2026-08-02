@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { FormEvent } from "react";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,10 +9,16 @@ const navigation = vi.hoisted(() => ({
   params: { eventId: undefined as string | undefined },
   push: vi.fn(),
 }));
+const createControllerEvent = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useParams: () => navigation.params,
   useRouter: () => ({ push: navigation.push }),
+}));
+
+vi.mock("@/lib/event-auth/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/event-auth/client")>()),
+  createControllerEvent,
 }));
 
 describe("EventEditor", () => {
@@ -20,6 +26,7 @@ describe("EventEditor", () => {
     window.localStorage.clear();
     navigation.params = { eventId: undefined };
     navigation.push.mockClear();
+    createControllerEvent.mockReset();
   });
 
   it("does not server-render generated agenda ids", () => {
@@ -30,7 +37,7 @@ describe("EventEditor", () => {
     expect(html).not.toContain("-speaker-name");
   });
 
-  it("requires empty, valid event access before opening the new-event editor", async () => {
+  it("creates a new event before navigating to its agenda editor", async () => {
     render(<EventEditor />);
 
     expect(await screen.findByRole("heading", { name: "Set access for new event" })).toBeInTheDocument();
@@ -39,6 +46,10 @@ describe("EventEditor", () => {
     };
     expect(loginName.getAttribute("value") ?? "").toBe("");
     expect(screen.queryByLabelText("Event name")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+    expect(createControllerEvent).not.toHaveBeenCalled();
+    expect(navigation.push).not.toHaveBeenCalled();
 
     loginName.value = "event-access";
     fireEvent.input(loginName);
@@ -52,10 +63,68 @@ describe("EventEditor", () => {
     confirmation.value = "123456";
     fireEvent.input(confirmation);
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue to event details" }));
+    const created = makeEvent("New event");
+    createControllerEvent.mockResolvedValueOnce({
+      ok: true,
+      data: { event: created, loginName: "event-access", version: 1 },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
 
-    expect(await screen.findByLabelText("Event name")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Change access" })).toBeInTheDocument();
+    expect(createControllerEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ loginName: "event-access", password: "123456" }),
+    );
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(`/events/${created.id}/edit`),
+    );
+    expect(screen.queryByLabelText("Event name")).not.toBeInTheDocument();
+  });
+
+  it("keeps a duplicate login on the access step and retries cleanly", async () => {
+    render(<EventEditor />);
+
+    await screen.findByRole("heading", { name: "Set access for new event" });
+    const loginName = screen.getByLabelText("Event login name") as HTMLElement & {
+      value: string;
+    };
+    const password = screen.getByLabelText("Event password") as HTMLElement & { value: string };
+    const confirmation = screen.getByLabelText("Repeat the password") as HTMLElement & {
+      value: string;
+    };
+    loginName.value = "already-used";
+    fireEvent.input(loginName);
+    password.value = "123456";
+    fireEvent.input(password);
+    confirmation.value = "123456";
+    fireEvent.input(confirmation);
+
+    createControllerEvent.mockResolvedValueOnce({
+      ok: false,
+      code: "login_taken",
+      message: "That event login name is already used. Choose a different one.",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+
+    expect(
+      await screen.findByText("That event login name is already used. Choose a different one."),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Event name")).not.toBeInTheDocument();
+    expect(navigation.push).not.toHaveBeenCalled();
+
+    loginName.value = "available-name";
+    fireEvent.input(loginName);
+    const created = makeEvent("New event");
+    createControllerEvent.mockResolvedValueOnce({
+      ok: true,
+      data: { event: created, loginName: "available-name", version: 1 },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+
+    expect(createControllerEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ loginName: "available-name" }),
+    );
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(`/events/${created.id}/edit`),
+    );
   });
 
   it("lets both Return to control buttons navigate without requiring a save", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 import { AlertCircle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +37,13 @@ export function OpenEventForm({
     });
   }
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit() {
     setError("");
+
+    if (!loginName.trim() || !password) {
+      setError("Enter the event login name and password.");
+      return;
+    }
 
     setBusy(true);
     const result = await loginToEvent(normalizeLoginName(loginName), password);
@@ -54,7 +58,8 @@ export function OpenEventForm({
 
   return (
     <form
-      onSubmit={submit}
+      onSubmit={(event) => event.preventDefault()}
+      noValidate
       className="grid w-full gap-3 rounded-[22px] border border-ink/8 bg-white/80 p-[18px] text-left shadow-[0_22px_70px_rgba(31,26,50,0.08),inset_0_1px_rgba(255,255,255,0.9)] backdrop-blur-2xl"
     >
       <Input
@@ -85,7 +90,7 @@ export function OpenEventForm({
         )}
       </div>
 
-      <Button type="submit" variant="primary" disabled={busy}>
+      <Button type="button" variant="primary" disabled={busy} onClick={() => void submit()}>
         {busy ? "Checking…" : "Open event"}
         {!busy && <ArrowRight size={16} aria-hidden />}
       </Button>
