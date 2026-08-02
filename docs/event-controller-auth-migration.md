@@ -10,9 +10,9 @@ The visible event title is independent and can be changed without changing the
 login. The database canonicalizes login names by trimming, collapsing whitespace,
 and lowercasing them.
 
-A signed-in controller can also create a one-time invitation. The raw token is
-never stored in PostgreSQL; its hash expires after 24 hours and is deleted as it
-creates the recipient's event session.
+A signed-in controller can also create a reusable invitation. The raw token is
+never stored in PostgreSQL; its hash expires after 24 hours and can issue an
+independent event session to each device that opens it before then.
 
 ## Migration files
 
@@ -23,10 +23,12 @@ migrations are:
    model and creates per-event sessions and versioned writes.
 2. `20260801000000_simplify_event_access.sql` — makes the event name the access
    identifier and removes recovery credentials/functions.
-3. `20260801010000_event_invites.sql` — adds hashed, one-time, 24-hour event
+3. `20260801010000_event_invites.sql` — adds hashed, 24-hour event
    invitation links and the transactional redemption functions.
 4. `20260801020000_separate_event_login_name.sql` — separates the stable login
    name from the editable event title.
+5. `20260801030000_reusable_event_invites.sql` — keeps each invitation valid for
+   multiple redemptions until it expires, is revoked, or is replaced.
 
 Do not edit a migration that has already been applied. Add a new forward migration
 for future schema changes.

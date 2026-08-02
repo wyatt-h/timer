@@ -6,7 +6,7 @@ Timer is a focused event timer for single speakers and multi-speaker panels. An 
 
 - Independent events: no teams, no accounts, no workspace to belong to
 - Per-event access: a lowercase event login name and a password of at least six characters
-- One-time, 24-hour invitation links that open an event without exposing its password
+- Reusable, 24-hour invitation links that open an event without exposing its password
 - Event builder, reachable straight from the home screen
 - Edit existing events at any time
 - CSV batch import for one or multiple events
@@ -14,8 +14,8 @@ Timer is a focused event timer for single speakers and multi-speaker panels. An 
 - Independent panel-total and per-speaker timing
 - Configurable default panelist duration
 - Start, pause, reset, skip, and time-adjustment controls
-- Drag-to-reorder with drop indicators and inline editing for upcoming live agenda items
-- Keyboard shortcuts and a focus mode for the live console
+- Draft-and-save editing for upcoming live agenda items, with drag-to-reorder and conflict notice
+- Focus mode for the live console
 - Compact live control room with a wall clock and a visible cloud save state
 - Fullscreen audience display
 - Zoom App that publishes the live speaker countdown to every meeting participant
@@ -36,8 +36,8 @@ event's visible title changes.
   password of at least six characters are chosen in the builder.
 - **Open an event** on another device needs the login name and password. Login names are
   matched without regard to capitalization or repeated spaces.
-- A signed-in device can create a **one-time invitation link**. It expires after
-  24 hours, is consumed by the first recipient, and can be revoked before use.
+- A signed-in device can create a **reusable invitation link**. It expires after
+  24 hours, can open the event on multiple devices, and can be revoked at any time.
   Opening it creates the recipient's normal event session and remembers the event
   under **On this device**. Creating a replacement revokes the older link.
 - A controller signed in to one event cannot see, read, or change another. Every
@@ -275,13 +275,13 @@ use generic public error messages, and never return a database message.
 | `POST /api/event-auth/create` | none — public, rate-limited. Takes the event, login name, and password, then sets the event session cookie |
 | `POST /api/event-auth/login` | login name + password, rate-limited. Returns only that event |
 | `POST /api/event-auth/logout` | the session cookie for the named event; clears it and no other |
-| `POST /api/event-auth/redeem-invite` | a valid, unused invitation token; consumes it and creates the recipient's event session |
+| `POST /api/event-auth/redeem-invite` | a valid, unexpired invitation token; creates an independent event session without consuming the link |
 | `POST /api/event-auth/change-password` | a valid session for the event, plus the current password |
 | `GET /api/events/:eventId` | a valid session for that exact event |
 | `PUT /api/events/:eventId` | a valid session for that exact event, plus the version last read |
 | `DELETE /api/events/:eventId` | a valid session for that exact event |
 | `POST /api/events/:eventId/invites` | a valid session; creates one 24-hour link and revokes any older outstanding link |
-| `DELETE /api/events/:eventId/invites` | a valid session; revokes the named unused invitation |
+| `DELETE /api/events/:eventId/invites` | a valid session; revokes the named active invitation |
 
 No endpoint lists events; every read is addressed by one id and gated by that id's
 session. `login` never accepts an event id as proof of anything. An unknown login name and a

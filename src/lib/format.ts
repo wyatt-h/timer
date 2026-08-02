@@ -1,4 +1,4 @@
-import type { AgendaItem, Speaker, TimerEvent, TimerSegment } from "@/lib/types";
+import type { AgendaItem, TimerEvent, TimerSegment } from "@/lib/types";
 
 export type TimerTone = "normal" | "caution" | "critical";
 
@@ -92,28 +92,6 @@ export function panelLabel(item: AgendaItem) {
   if (!names.length) return "Panel";
   if (names.length <= 2) return names.join(" and ");
   return `${names[0]}, ${names[1]} and ${names.length - 2} more`;
-}
-
-/**
- * Whether the whole-panel countdown chimes. Panels default to silent: the
- * total runs out mid-sentence for whoever holds the microphone, so an alert
- * there interrupts rather than informs. Opt in per panel to override.
- */
-export function isPanelMuted(item: AgendaItem) {
-  return item.soundMuted ?? true;
-}
-
-/**
- * The control room's master switch for audience sound. Older events have no
- * value stored, and those should keep chiming, so absence means enabled.
- */
-export function isSoundEnabled(runtime: { soundEnabled?: boolean }) {
-  return runtime.soundEnabled ?? true;
-}
-
-/** Whether a speaker's own countdown chimes. Speakers alert by default. */
-export function isSpeakerMuted(speaker: Speaker | undefined) {
-  return speaker?.soundMuted ?? false;
 }
 
 /** The heading for an agenda item in lists and on the audience screen. */

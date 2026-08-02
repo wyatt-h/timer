@@ -342,7 +342,7 @@ describe("passwords and sessions", () => {
 });
 
 describe("event invitations", () => {
-  it("creates a one-time link without storing its raw token, then opens the event", async () => {
+  it("creates a reusable link without storing its raw token, then opens it twice", async () => {
     const created = await createEvent("Invited Event");
     const invitation = await inviteRoute.POST(
       new Request(`http://localhost/api/events/${created.event.id}/invites`, { method: "POST" }),
@@ -377,14 +377,16 @@ describe("event invitations", () => {
       db,
       `select count(*)::int as count from public.event_invites where event_id = $1`,
       [created.event.id],
-    ))?.count).toBe(0);
+    ))?.count).toBe(1);
 
     cookieJar.clear();
     const replay = await redeemInviteRoute(
       jsonRequest("http://localhost/api/event-auth/redeem-invite", { token }),
     );
-    expect(replay.status).toBe(401);
-    expect((await read(replay)).error).toBe("invalid_invite");
+    applyCookies(replay);
+    expect(replay.status).toBe(200);
+    expect(((await read(replay)).event as TimerEvent).id).toBe(created.event.id);
+    expect(cookieJar.has(sessionCookieName(created.event.id))).toBe(true);
   });
 
   it("requires the event session to create or revoke an invitation", async () => {

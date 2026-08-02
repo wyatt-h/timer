@@ -1,7 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, Check, Copy, KeyRound, Link2, LogOut, ShieldCheck, Trash2, X } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  ChevronDown,
+  Copy,
+  KeyRound,
+  Link2,
+  LogOut,
+  ShieldCheck,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,13 +41,11 @@ type Panel = "none" | "password" | "invite";
 
 export function ControllerAccessCard({
   eventId,
-  eventName,
   loginName,
   onSignOut,
   onDelete,
 }: {
   eventId: string;
-  eventName: string;
   loginName: string;
   onSignOut: () => void;
   onDelete: () => void;
@@ -94,11 +103,7 @@ export function ControllerAccessCard({
   async function copyInvite() {
     if (!invite) return;
     try {
-      await navigator.clipboard.writeText(
-        `You're invited to control "${eventName}" in Timer.\n\n` +
-          `Open this one-time link within 24 hours:\n${invite.inviteUrl}\n\n` +
-          "The link can be used once.",
-      );
+      await navigator.clipboard.writeText(invite.inviteUrl);
     } catch {
       setError("The invitation is ready, but this browser could not copy it.");
       return;
@@ -124,11 +129,19 @@ export function ControllerAccessCard({
   }
 
   return (
-    <div className="grid gap-2 rounded-field border border-line bg-surface-raised px-3.5 py-3">
-      <span className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
-        <ShieldCheck size={12} aria-hidden />
-        Event access
-      </span>
+    <details className="group rounded-field border border-line bg-surface-raised">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-2.5 marker:content-none">
+        <span className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
+          <ShieldCheck size={12} aria-hidden />
+          Event access
+        </span>
+        <ChevronDown
+          size={14}
+          aria-hidden
+          className="text-text-subtle transition-transform duration-150 group-open:rotate-180"
+        />
+      </summary>
+      <div className="grid gap-2 border-t border-line-soft px-3.5 py-3">
       <p className="text-[12px] text-text-muted">
         Login name: <strong className="font-mono font-semibold text-ink">{loginName}</strong>
       </p>
@@ -146,7 +159,7 @@ export function ControllerAccessCard({
       {panel === "invite" && invite ? (
         <div className="grid gap-3">
           <p className="text-[12px] leading-relaxed text-text-muted">
-            This link expires in 24 hours and works once. Creating another invitation also
+            This link can be used multiple times for 24 hours. Creating another invitation
             revokes this one.
           </p>
           <output className="block overflow-hidden text-ellipsis whitespace-nowrap rounded-control border border-line bg-white px-3 py-2 font-mono text-[11px] text-text-muted">
@@ -155,7 +168,7 @@ export function ControllerAccessCard({
           <div className="grid grid-cols-2 gap-2">
             <Button variant="primary" size="sm" disabled={busy} onClick={() => void copyInvite()}>
               {copied ? <Check size={13} aria-hidden /> : <Copy size={13} aria-hidden />}
-              {copied ? "Copied" : "Copy invitation"}
+              {copied ? "Copied" : "Copy link"}
             </Button>
             <Button variant="secondary" size="sm" disabled={busy} onClick={() => void revokeInvite()}>
               <X size={13} aria-hidden />
@@ -224,6 +237,7 @@ export function ControllerAccessCard({
           </Button>
         </div>
       )}
-    </div>
+      </div>
+    </details>
   );
 }

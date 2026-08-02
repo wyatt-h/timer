@@ -28,7 +28,7 @@ function siteOrigin(request: Request) {
   }
 }
 
-/** Creates one 24-hour, one-use link and revokes any older outstanding link. */
+/** Creates one reusable 24-hour link and revokes any older outstanding link. */
 export async function POST(request: Request, context: Context) {
   try {
     const eventId = await eventIdFrom(context);
@@ -54,7 +54,7 @@ export async function POST(request: Request, context: Context) {
   }
 }
 
-/** Revokes a link that has not already been redeemed or replaced. */
+/** Revokes a link that has not expired or already been replaced. */
 export async function DELETE(request: Request, context: Context) {
   try {
     const eventId = await eventIdFrom(context);

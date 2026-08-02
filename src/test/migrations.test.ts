@@ -37,6 +37,7 @@ const CONTROLLER_MIGRATION = "20260731010000_event_controller_auth.sql";
 const ACCESS_MIGRATION = "20260801000000_simplify_event_access.sql";
 const INVITE_MIGRATION = "20260801010000_event_invites.sql";
 const LOGIN_NAME_MIGRATION = "20260801020000_separate_event_login_name.sql";
+const REUSABLE_INVITE_MIGRATION = "20260801030000_reusable_event_invites.sql";
 const VALIDATOR = fileURLToPath(
   new URL("../../supabase/validate_event_controller_database.sql", import.meta.url),
 );
@@ -47,7 +48,7 @@ describe("the complete migration history", () => {
     // first failure, so reaching this point is the assertion. Named explicitly
     // because it is the check that guards against an unrunnable migration.
     const files = migrationFiles();
-    expect(files.at(-1)).toBe(LOGIN_NAME_MIGRATION);
+    expect(files.at(-1)).toBe(REUSABLE_INVITE_MIGRATION);
     expect(files).toEqual([...files].sort());
 
     const tables = await rows<{ table_name: string }>(
@@ -84,7 +85,7 @@ describe("the complete migration history", () => {
       create schema if not exists supabase_migrations;
       create table if not exists supabase_migrations.schema_migrations (version text primary key);
       insert into supabase_migrations.schema_migrations (version)
-      values ('20260801020000') on conflict do nothing;
+      values ('20260801030000') on conflict do nothing;
     `);
     const report = await rows<{ area: string; status: string; details: string }>(
       db,
@@ -342,7 +343,13 @@ describe("row level security", () => {
 describe("existing-row safety", () => {
   it("refuses to run when legacy team-owned events exist, and destroys nothing", async () => {
     const legacy = await createBareDatabase();
-    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION, INVITE_MIGRATION, LOGIN_NAME_MIGRATION].includes(name))) {
+    for (const file of migrationFiles().filter((name) => ![
+      CONTROLLER_MIGRATION,
+      ACCESS_MIGRATION,
+      INVITE_MIGRATION,
+      LOGIN_NAME_MIGRATION,
+      REUSABLE_INVITE_MIGRATION,
+    ].includes(name))) {
       await legacy.exec(readMigration(file));
     }
 
@@ -388,7 +395,13 @@ describe("existing-row safety", () => {
 
   it("runs once the operator has explicitly cleared the legacy rows", async () => {
     const legacy = await createBareDatabase();
-    for (const file of migrationFiles().filter((name) => ![CONTROLLER_MIGRATION, ACCESS_MIGRATION, INVITE_MIGRATION, LOGIN_NAME_MIGRATION].includes(name))) {
+    for (const file of migrationFiles().filter((name) => ![
+      CONTROLLER_MIGRATION,
+      ACCESS_MIGRATION,
+      INVITE_MIGRATION,
+      LOGIN_NAME_MIGRATION,
+      REUSABLE_INVITE_MIGRATION,
+    ].includes(name))) {
       await legacy.exec(readMigration(file));
     }
     await legacy.exec(`
@@ -983,7 +996,7 @@ describe("sessions", () => {
   });
 });
 
-describe("one-time event invitations", () => {
+describe("reusable event invitations", () => {
   async function seed(eventName: string) {
     const [id, viewerToken, agendaId, speakerId] = await Promise.all([
       newUuid(db),
@@ -1035,7 +1048,7 @@ describe("one-time event invitations", () => {
     )).toEqual([{ token_hash: "b".repeat(64) }]);
   });
 
-  it("consumes a link while issuing the recipient session in one transaction", async () => {
+  it("keeps a link while issuing an independent session for each recipient", async () => {
     const eventId = await seed("Invite redeem");
     await db.query(`select public.create_event_invite($1, $2, 86400)`, [
       eventId,
@@ -1054,7 +1067,7 @@ describe("one-time event invitations", () => {
       db,
       `select count(*)::int as count from public.event_invites where event_id = $1`,
       [eventId],
-    ))?.count).toBe(0);
+    ))?.count).toBe(1);
     expect((await one<{ count: number }>(
       db,
       `select count(*)::int as count from public.event_sessions where token_hash = $1`,
@@ -1066,10 +1079,15 @@ describe("one-time event invitations", () => {
       `select public.redeem_event_invite($1, $2, 2592000) as result`,
       ["c".repeat(64), "e".repeat(64)],
     );
-    expect(replay?.result.status).toBe("invalid");
+    expect(replay?.result.status).toBe("redeemed");
+    expect((await one<{ count: number }>(
+      db,
+      `select count(*)::int as count from public.event_sessions where event_id = $1`,
+      [eventId],
+    ))?.count).toBe(3);
   });
 
-  it("allows only one winner when two devices redeem together", async () => {
+  it("allows two devices to redeem the same live link together", async () => {
     const eventId = await seed("Invite race");
     await db.query(`select public.create_event_invite($1, $2, 86400)`, [
       eventId,
@@ -1089,8 +1107,8 @@ describe("one-time event invitations", () => {
         ["f".repeat(64), secondToken],
       ),
     ]);
-    expect(attempts.map((attempt) => attempt?.result.status).sort()).toEqual([
-      "invalid",
+    expect(attempts.map((attempt) => attempt?.result.status)).toEqual([
+      "redeemed",
       "redeemed",
     ]);
   });

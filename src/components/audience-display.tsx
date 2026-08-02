@@ -18,9 +18,6 @@ import {
   elapsedRatio,
   flattenSegments,
   formatTimer,
-  isPanelMuted,
-  isSoundEnabled,
-  isSpeakerMuted,
   panelLabel,
   timerTone,
 } from "@/lib/format";
@@ -68,7 +65,6 @@ export function AudienceDisplay() {
   const [panelRemaining, setPanelRemaining] = useState(runtime?.panelRemainingSeconds ?? 0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { play, unlock, disable, isReady } = useChime();
-  const soundAllowed = isSoundEnabled(runtime ?? {});
   const [chimePreset, setChimePreset] = useState<ChimePreset>("feather");
   const [soundPickerOpen, setSoundPickerOpen] = useState(false);
   const soundPicker = useRef<HTMLDivElement>(null);
@@ -160,11 +156,10 @@ export function AudienceDisplay() {
       // must not re-alert on every tick.
       const speakerKey = `speaker:${liveSegment?.id}`;
       if (runtime.status === "running" && speakerSeconds <= 0) {
-        const speaker = liveItem?.speakers.find((entry) => entry.id === liveSegment?.id);
         if (!chimed.current.has(speakerKey)) {
           chimed.current.add(speakerKey);
           raiseAlert();
-          if (soundAllowed && isReady && !isSpeakerMuted(speaker)) {
+          if (isReady) {
             void play(chimePreset);
           }
         }
@@ -177,7 +172,7 @@ export function AudienceDisplay() {
         if (!chimed.current.has(panelKey)) {
           chimed.current.add(panelKey);
           raiseAlert();
-          if (soundAllowed && isReady && liveItem && !isPanelMuted(liveItem)) {
+          if (isReady) {
             void play(chimePreset);
           }
         }
@@ -196,7 +191,6 @@ export function AudienceDisplay() {
     raiseAlert,
     runtime,
     segments,
-    soundAllowed,
   ]);
 
   const previewChime = useCallback(
@@ -220,15 +214,6 @@ export function AudienceDisplay() {
     if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
     else await document.exitFullscreen();
   }, []);
-
-  // The display is often driven by a keyboard taped to a laptop at the back.
-  useEffect(() => {
-    function onKeyDown(keyEvent: KeyboardEvent) {
-      if (keyEvent.key.toLowerCase() === "f") void toggleFullscreen();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleFullscreen]);
 
   if (!event || !runtime || !segments.length) {
     return (
@@ -312,27 +297,8 @@ export function AudienceDisplay() {
           </span>
         )}
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {/*
-            * Browsers block audio until the page has been interacted with, so
-            * the alert cannot arm itself. Prompting once here is the honest
-            * alternative to a chime that silently never fires.
-            */}
-          {/*
-            * Three states, and the button never disappears — an operator
-            * needs to see at a glance whether this screen will actually make
-            * a sound. Audio cannot be unlocked remotely: the browser demands
-            * a gesture on this device, so when the control room turns sound
-            * on, screens that have not been clicked say so.
-            */}
-          {!soundAllowed ? (
-            <span
-              className="inline-flex min-h-[38px] cursor-default items-center gap-2 rounded-field border border-white/10 px-3 text-[12px] font-semibold text-[#9a99a4]"
-              title="Muted from the control room"
-            >
-              <VolumeX size={14} />
-              Sound off
-            </span>
-          ) : isReady ? (
+          {/* Sound is local to this display; another controller cannot change it. */}
+          {isReady ? (
             <button
               className="inline-flex min-h-[38px] items-center gap-2 rounded-field border border-[#4ade80]/50 bg-[#4ade80]/15 px-3 text-[12px] font-semibold text-[#4ade80] transition-colors duration-150 hover:bg-[#4ade80]/22 hover:text-[#6cf09d]"
               onClick={() => void disable()}

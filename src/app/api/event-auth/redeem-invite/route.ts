@@ -12,7 +12,7 @@ import {
 
 const bodySchema = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) });
 
-/** Exchanges a one-time bearer token for a normal event-scoped session. */
+/** Exchanges a valid 24-hour bearer token for a normal event-scoped session. */
 export async function POST(request: Request) {
   try {
     const parsed = bodySchema.safeParse(await readJsonBody(request));

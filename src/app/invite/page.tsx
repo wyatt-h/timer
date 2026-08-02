@@ -62,7 +62,7 @@ export default function InvitePage() {
                   Opening your event…
                 </h1>
                 <p className="mt-1.5 text-[13px] text-text-muted">
-                  This invitation can be used once.
+                  This invitation remains available for 24 hours.
                 </p>
               </div>
             </>

@@ -2,7 +2,7 @@
  * Timer database validator
  *
  * Run this entire file in Supabase Dashboard -> SQL Editor after applying
- * 20260801020000_separate_event_login_name.sql.
+ * 20260801030000_reusable_event_invites.sql.
  *
  * READ-ONLY: this script creates, changes, and deletes nothing. It returns one
  * result table. The SUMMARY row must be PASS and every other row should be PASS.
@@ -251,10 +251,10 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     exists (
       select 1
       from supabase_migrations.schema_migrations
-      where version = '20260801020000'
+      where version = '20260801030000'
     ),
     'FAIL',
-    'Expected version 20260801020000 in supabase_migrations.schema_migrations'
+    'Expected version 20260801030000 in supabase_migrations.schema_migrations'
 
   union all
   select
@@ -571,6 +571,19 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
       and not coalesce(has_function_privilege('authenticated', 'public.public_event_payload(uuid)', 'execute'), true),
     'FAIL',
     'Only get_public_event and get_zoom_event are callable by anon/authenticated'
+
+  union all
+  select
+    345, 'functions', 'invitation redemption keeps active links reusable',
+    not exists (
+      select 1
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'redeem_event_invite'
+        and p.prosrc ~* 'delete[[:space:]]+from[[:space:]]+public\.event_invites[[:space:]]+where[[:space:]]+token_hash'
+    ),
+    'FAIL',
+    'redeem_event_invite must retain an active token until expiry or explicit revocation'
 
   union all
   select

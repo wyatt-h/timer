@@ -7,6 +7,8 @@ const audienceTestState = vi.hoisted(() => ({
   play: vi.fn(),
   unlock: vi.fn(),
   disable: vi.fn(),
+  remoteSoundEnabled: true,
+  remoteSpeakerMuted: false,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -31,6 +33,7 @@ vi.mock("@/lib/store", () => ({
               id: "speaker-1",
               name: "Eddie",
               durationSeconds: 10 * 60,
+              soundMuted: audienceTestState.remoteSpeakerMuted,
             },
           ],
         },
@@ -44,6 +47,7 @@ vi.mock("@/lib/store", () => ({
         panelRemainingSeconds: null,
         panelEndsAt: null,
         updatedAt: 0,
+        soundEnabled: audienceTestState.remoteSoundEnabled,
       },
       createdAt: 0,
     };
@@ -72,6 +76,8 @@ vi.mock("@/lib/use-wake-lock", () => ({
 describe("AudienceDisplay", () => {
   beforeEach(() => {
     audienceTestState.timerFinished = false;
+    audienceTestState.remoteSoundEnabled = true;
+    audienceTestState.remoteSpeakerMuted = false;
     window.localStorage.clear();
     vi.clearAllMocks();
   });
@@ -94,6 +100,17 @@ describe("AudienceDisplay", () => {
 
   it("plays the alarm when a running speaker crosses zero", async () => {
     audienceTestState.timerFinished = true;
+    render(<AudienceDisplay />);
+
+    await waitFor(() =>
+      expect(audienceTestState.play).toHaveBeenCalledWith("feather"),
+    );
+  });
+
+  it("keeps sound local even if legacy event sound flags are muted", async () => {
+    audienceTestState.timerFinished = true;
+    audienceTestState.remoteSoundEnabled = false;
+    audienceTestState.remoteSpeakerMuted = true;
     render(<AudienceDisplay />);
 
     await waitFor(() =>

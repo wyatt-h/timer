@@ -4,15 +4,13 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  Bell,
-  BellOff,
   Check,
+  ChevronDown,
   Columns2,
   Copy,
   FastForward,
   Focus,
   GripVertical,
-  Keyboard,
   Maximize2,
   Pause,
   Pencil,
@@ -26,8 +24,6 @@ import {
   UserRound,
   UsersRound,
   Video,
-  Volume2,
-  VolumeX,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -48,9 +44,6 @@ import {
   formatClockTime,
   formatDuration,
   formatTimer,
-  isPanelMuted,
-  isSoundEnabled,
-  isSpeakerMuted,
   itemLabel,
   panelLabel,
   timerTone,
@@ -64,7 +57,7 @@ import { ControllerAccessCard } from "@/components/event-access/controller-acces
 import { ControllerSignInGate } from "@/components/event-access/controller-sign-in-gate";
 import { SaveStatusBadge } from "@/components/event-access/save-status-badge";
 import type { SaveState } from "@/lib/save-coordinator";
-import { useShortcuts, useThrottledAnnouncement } from "@/lib/use-shortcuts";
+import { useThrottledAnnouncement } from "@/lib/use-throttled-announcement";
 import { formatZoomToken, makeZoomToken } from "@/lib/zoom/token";
 import type { AgendaItem, TimerEvent, RuntimeState, Speaker, TimerSegment } from "@/lib/types";
 
@@ -213,20 +206,6 @@ export function panelTimerTogglePatch({
   };
 }
 
-const SHORTCUT_HELP = [
-  { keys: "Space", action: "Start or pause the speaker timer" },
-  { keys: "P", action: "Start or pause the panel timer" },
-  { keys: "→ or N", action: "Move to the next part (starts paused)" },
-  { keys: "← or B", action: "Go back one part" },
-  { keys: "R", action: "Reset the current timer" },
-  { keys: "↑ ↓", action: "Add or remove fifteen seconds for the speaker" },
-  { keys: "[ ]", action: "Add or remove fifteen seconds from the panel total" },
-  { keys: "S", action: "Skip the rest of a panel" },
-  { keys: "M", action: "Mute or unmute audience displays" },
-  { keys: "F", action: "Toggle focus mode (timer only)" },
-  { keys: "?", action: "Show or hide this list" },
-];
-
 export function ControlRoom() {
   const params = useParams<{ eventId: string }>();
   const router = useRouter();
@@ -327,7 +306,7 @@ type LiveConsoleProps = {
   conflictResolution: ConflictResolution | null;
 };
 
-function LiveConsole({
+export function LiveConsole({
   event,
   loginName,
   segments,
@@ -353,9 +332,33 @@ function LiveConsole({
   const [copied, setCopied] = useState(false);
   const [zoomCopied, setZoomCopied] = useState(false);
   const [confirmingEnd, setConfirmingEnd] = useState(false);
-  const [showShortcuts, setShowShortcuts] = useState(false);
   const [projectedFinish, setProjectedFinish] = useState<number | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [agendaDraft, setAgendaDraft] = useState(event.agenda);
+  const [agendaDirty, setAgendaDirty] = useState(false);
+  const [agendaBaseSnapshot, setAgendaBaseSnapshot] = useState(() =>
+    JSON.stringify(event.agenda),
+  );
+  const [agendaChangedElsewhere, setAgendaChangedElsewhere] = useState(false);
+
+  const serverAgendaSnapshot = JSON.stringify(event.agenda);
+
+  useEffect(() => {
+    let current = true;
+    queueMicrotask(() => {
+      if (!current) return;
+      if (agendaDirty) {
+        if (serverAgendaSnapshot !== agendaBaseSnapshot) setAgendaChangedElsewhere(true);
+        return;
+      }
+      setAgendaDraft(event.agenda);
+      setAgendaBaseSnapshot(serverAgendaSnapshot);
+      setAgendaChangedElsewhere(false);
+    });
+    return () => {
+      current = false;
+    };
+  }, [agendaBaseSnapshot, agendaDirty, event.agenda, serverAgendaSnapshot]);
 
   const segmentIndex = Math.min(runtime.segmentIndex, segments.length - 1);
   const current = segments[segmentIndex];
@@ -561,34 +564,6 @@ function LiveConsole({
     patchSpeaker(item, speakerId, { durationSeconds });
   }
 
-  /*
-   * Mute state is stored on the event, so the audience display — which is a
-   * separate browser on a separate machine — honours the same setting.
-   */
-  const currentSpeaker = currentItem.speakers.find((speaker) => speaker.id === current.id);
-  const speakerMuted = isSpeakerMuted(currentSpeaker);
-  const panelMuted = isPanelMuted(currentItem);
-
-  function toggleSpeakerMute() {
-    if (!currentSpeaker) return;
-    patchSpeaker(currentItem, currentSpeaker.id, { soundMuted: !speakerMuted });
-  }
-
-  /*
-   * The master switch for every audience display. It rides along with the
-   * rest of the runtime state, so screens pick it up through the same
-   * broadcast that carries the clock.
-   */
-  const soundEnabled = isSoundEnabled(runtime);
-
-  function toggleSound() {
-    setRuntime({ soundEnabled: !soundEnabled });
-  }
-
-  function togglePanelMute() {
-    patchAgendaItem(currentItem.id, { soundMuted: !panelMuted });
-  }
-
   const adjustSpeaker = (seconds: number) => adjust(seconds, false);
   const adjustPanel = (seconds: number) => adjust(seconds, true);
 
@@ -635,13 +610,15 @@ function LiveConsole({
     );
   }
 
+  function editAgenda(updater: (agenda: AgendaItem[]) => AgendaItem[]) {
+    setAgendaDraft((currentAgenda) => updater(currentAgenda));
+    setAgendaDirty(true);
+  }
+
   function patchAgendaItem(itemId: string, patch: Partial<AgendaItem>) {
-    mutateEvent((currentEvent) => ({
-      ...currentEvent,
-      agenda: currentEvent.agenda.map((item) =>
-        item.id === itemId ? { ...item, ...patch } : item,
-      ),
-    }));
+    editAgenda((agenda) =>
+      agenda.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
+    );
   }
 
   function patchSpeaker(item: AgendaItem, speakerId: string, patch: Partial<Speaker>) {
@@ -649,10 +626,23 @@ function LiveConsole({
   }
 
   function removeFutureItem(itemId: string) {
-    mutateEvent((currentEvent) => ({
-      ...currentEvent,
-      agenda: currentEvent.agenda.filter((item) => item.id !== itemId),
-    }));
+    editAgenda((agenda) => agenda.filter((item) => item.id !== itemId));
+  }
+
+  function saveAgendaChanges() {
+    if (!agendaDirty) return;
+    const savedAgenda = agendaDraft;
+    mutateEvent((currentEvent) => ({ ...currentEvent, agenda: savedAgenda }));
+    setAgendaDirty(false);
+    setAgendaChangedElsewhere(false);
+    setAgendaBaseSnapshot(JSON.stringify(savedAgenda));
+  }
+
+  function useLatestAgenda() {
+    setAgendaDraft(event.agenda);
+    setAgendaDirty(false);
+    setAgendaChangedElsewhere(false);
+    setAgendaBaseSnapshot(serverAgendaSnapshot);
   }
 
   async function copyLink() {
@@ -681,32 +671,6 @@ function LiveConsole({
     window.setTimeout(() => setZoomCopied(false), 2400);
   }
 
-  useShortcuts(
-    [
-      { keys: [" "], run: toggleSpeakerTimer },
-      { keys: ["p"], run: () => isPanel && togglePanelTimer() },
-      {
-        keys: ["arrowright", "n"],
-        run: () => nextPart && handleJumpTo(segmentIndex + 1),
-      },
-      { keys: ["arrowleft", "b"], run: () => previousPart && handleJumpTo(segmentIndex - 1) },
-      { keys: ["r"], run: resetCurrent },
-      { keys: ["arrowup"], run: () => adjust(15, false) },
-      { keys: ["arrowdown"], run: () => adjust(-15, false) },
-      { keys: ["]"], run: () => isPanel && adjust(15, true) },
-      { keys: ["["], run: () => isPanel && adjust(-15, true) },
-      {
-        keys: ["s"],
-        run: () => isPanel && nextItemSegmentIndex >= 0 && handleJumpTo(nextItemSegmentIndex),
-      },
-      { keys: ["m"], run: toggleSound },
-      { keys: ["f"], run: () => setIsFocused((focused) => !focused) },
-      { keys: ["?", "/"], run: () => setShowShortcuts((open) => !open) },
-      { keys: ["escape"], run: () => setShowShortcuts(false) },
-    ],
-    !confirmingEnd,
-  );
-
   /*
    * The agenda list depends only on the event and which item is live — never
    * on the ticking clock. Memoising it here means a 5Hz timer update cannot
@@ -715,21 +679,51 @@ function LiveConsole({
   const runWorkspace = useMemo(
     () => (
     <section className="min-h-[calc(100svh-7.875rem)] rounded-panel border border-line bg-white/95 p-5 shadow-[0_12px_34px_rgba(26,22,42,0.045)]">
-      <div className="mb-4 flex items-end justify-between gap-5">
+      <div className="mb-4 flex items-center justify-between gap-5">
         <div>
           <h2 className="text-[24px] font-semibold tracking-[-0.045em]">Up next</h2>
+          <span className="text-[12px] text-text-subtle">
+            {Math.max(0, agendaDraft.length - currentAgendaIndex - 1)} upcoming
+          </span>
         </div>
-        <span className="text-[12px] text-text-subtle">
-          {event.agenda.length - currentAgendaIndex - 1} upcoming
-        </span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {agendaDirty && (
+            <span className="text-[12px] font-semibold text-caution">Unsaved modifications</span>
+          )}
+          <button
+            type="button"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-control bg-violet px-3.5 text-[12px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark disabled:cursor-default disabled:bg-surface-sunken disabled:text-text-subtle"
+            disabled={!agendaDirty}
+            onClick={saveAgendaChanges}
+          >
+            <Check size={13} aria-hidden />
+            {agendaDirty ? "Save changes" : "No unsaved changes"}
+          </button>
+        </div>
       </div>
+
+      {agendaChangedElsewhere && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-control border border-caution/30 bg-caution-soft px-3 py-2.5">
+          <p className="text-[12px] leading-relaxed text-text-muted">
+            Another controller changed the run of show while you were editing. Save your
+            version to replace it, or load their latest version.
+          </p>
+          <button
+            type="button"
+            className="min-h-8 rounded-control border border-line bg-white px-2.5 text-[12px] font-semibold transition-colors hover:bg-surface-hover"
+            onClick={useLatestAgenda}
+          >
+            Load latest version
+          </button>
+        </div>
+      )}
 
       <SortableList
         className="grid gap-2"
-        items={event.agenda}
+        items={agendaDraft}
         scope={`live-agenda-${event.id}`}
         isItemDisabled={(_, itemIndex) => itemIndex <= currentAgendaIndex}
-        onReorder={(agenda) => mutateEvent((currentEvent) => ({ ...currentEvent, agenda }))}
+        onReorder={(agenda) => editAgenda(() => agenda)}
         renderItem={(item, itemIndex, { dragHandleRef, handleProps }) => {
           const isPast = itemIndex < currentAgendaIndex;
           const isCurrent = itemIndex === currentAgendaIndex;
@@ -1045,20 +1039,6 @@ function LiveConsole({
                                 />
                               )}
 
-                              {!hasSpoken && (
-                                <MuteToggle
-                                  muted={isSpeakerMuted(speaker)}
-                                  label={`end chime for ${
-                                    speaker.name || `panelist ${speakerIndex + 1}`
-                                  }`}
-                                  onToggle={() =>
-                                    patchSpeaker(item, speaker.id, {
-                                      soundMuted: !isSpeakerMuted(speaker),
-                                    })
-                                  }
-                                />
-                              )}
-
                               <button
                                 className="inline-flex min-h-8 items-center rounded-control border border-line bg-white px-2.5 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover disabled:border-transparent disabled:bg-violet-soft disabled:text-violet-dark"
                                 disabled={speakerIsCurrent}
@@ -1090,10 +1070,7 @@ function LiveConsole({
             type="button"
             className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-card border border-dashed border-violet/25 bg-violet-soft/40 text-[13px] font-semibold text-violet-dark transition-[border-color,background-color,transform] duration-150 hover:-translate-y-px hover:border-violet/45 hover:bg-violet-soft/70"
             onClick={() =>
-              mutateEvent((currentEvent) => ({
-                ...currentEvent,
-                agenda: [...currentEvent.agenda, makeAgendaItem(kind)],
-              }))
+              editAgenda((agenda) => [...agenda, makeAgendaItem(kind)])
             }
           >
             <Plus size={14} aria-hidden />
@@ -1104,7 +1081,16 @@ function LiveConsole({
     </section>
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [event, currentAgendaIndex, segmentIndex, segments, isRunning],
+    [
+      agendaChangedElsewhere,
+      agendaDirty,
+      agendaDraft,
+      currentAgendaIndex,
+      event.id,
+      isRunning,
+      segmentIndex,
+      segments,
+    ],
   );
 
 
@@ -1137,35 +1123,13 @@ function LiveConsole({
           <LiveClock />
           <SaveStatusBadge state={saveState} onRetry={onRetrySave} />
           <button
-            className={cn("grid size-11 shrink-0 place-items-center rounded-control border border-line bg-white text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark", !soundEnabled && "bg-surface-sunken text-text-subtle")}
-            onClick={toggleSound}
-            aria-pressed={soundEnabled}
-            aria-label={
-              soundEnabled
-                ? "Turn off end-of-timer sound on audience displays"
-                : "Turn on end-of-timer sound on audience displays"
-            }
-            title={soundEnabled ? "Audience sound on (M)" : "Audience sound off (M)"}
-          >
-            {soundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
-          </button>
-          <button
             className="grid size-11 shrink-0 place-items-center rounded-control border border-line bg-white text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark aria-expanded:bg-violet-soft aria-expanded:text-violet-dark"
             onClick={() => setIsFocused((focused) => !focused)}
             aria-pressed={isFocused}
             aria-label={isFocused ? "Show the run of show" : "Focus on the timer"}
-            title={isFocused ? "Show run of show (F)" : "Focus mode (F)"}
+            title={isFocused ? "Show run of show" : "Focus mode"}
           >
             {isFocused ? <Columns2 size={15} /> : <Focus size={15} />}
-          </button>
-          <button
-            className="grid size-11 shrink-0 place-items-center rounded-control border border-line bg-white text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark aria-expanded:bg-violet-soft aria-expanded:text-violet-dark"
-            onClick={() => setShowShortcuts((open) => !open)}
-            aria-expanded={showShortcuts}
-            aria-label="Keyboard shortcuts"
-            title="Keyboard shortcuts (?)"
-          >
-            <Keyboard size={15} />
           </button>
           <Link className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line bg-white px-3 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover" href={`/events/${event.id}/edit`}>
             <Pencil size={14} />
@@ -1263,17 +1227,6 @@ function LiveConsole({
         </div>
       )}
 
-      {showShortcuts && (
-        <div className="mx-auto mb-4 grid w-[min(1420px,100%)] grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-x-5 gap-y-2 rounded-card border border-line bg-white/95 px-5 py-4" role="region" aria-label="Keyboard shortcuts">
-          {SHORTCUT_HELP.map((shortcut) => (
-            <div key={shortcut.keys} className="flex items-center gap-2.5 text-[12px] text-text-muted">
-              <kbd className="min-w-14 rounded-md border border-line border-b-2 bg-surface-sunken px-1.5 py-0.5 text-center font-mono text-[12px] text-text-muted">{shortcut.keys}</kbd>
-              <span>{shortcut.action}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
       <div className={cn("mx-auto grid w-[min(1420px,100%)] items-start gap-4 transition-[grid-template-columns] duration-200", isFocused ? "max-w-[760px] grid-cols-1" : "grid-cols-[380px_minmax(0,1fr)] max-lg:grid-cols-[300px_minmax(0,1fr)] max-md:grid-cols-1")}>
         <section className={cn("sticky top-24 flex flex-col gap-3 rounded-panel border border-line bg-white/95 p-6 shadow-[0_12px_34px_rgba(26,22,42,0.045)] max-md:static", isFocused && "static")}>
           <div className="flex items-center justify-between gap-2.5">
@@ -1306,11 +1259,6 @@ function LiveConsole({
                   <span className="text-[12px] font-bold tracking-[0.08em] text-text-subtle uppercase">
                     {current.speaker}
                   </span>
-                  <MuteToggle
-                    muted={speakerMuted}
-                    label={`end chime for ${current.speaker}`}
-                    onToggle={toggleSpeakerMute}
-                  />
                 </div>
                 <strong className={cn("tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-success", speakerTone === "caution" && "text-caution", speakerTone === "critical" && "text-over")}>
                   {formatTimer(displaySeconds)}
@@ -1327,11 +1275,6 @@ function LiveConsole({
                   <span className="text-[12px] font-bold tracking-[0.08em] text-text-subtle uppercase">
                     Panel remaining
                   </span>
-                  <MuteToggle
-                    muted={panelMuted}
-                    label="end chime for the whole panel"
-                    onToggle={togglePanelMute}
-                  />
                 </div>
                 <strong className={cn("tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-success", panelTone === "caution" && "text-caution", panelTone === "critical" && "text-over")}>
                   {formatTimer(panelDisplaySeconds)}
@@ -1350,11 +1293,6 @@ function LiveConsole({
                 <span className="text-[12px] font-bold tracking-[0.08em] text-text-subtle uppercase">
                   {current.speaker}
                 </span>
-                <MuteToggle
-                  muted={speakerMuted}
-                  label={`end chime for ${current.speaker}`}
-                  onToggle={toggleSpeakerMute}
-                />
               </div>
               <strong className={cn("tabular mb-3 block font-mono text-[60px] leading-none font-medium tracking-[-0.06em] text-success", speakerTone === "caution" && "text-caution", speakerTone === "critical" && "text-over")}>
                 {formatTimer(displaySeconds)}
@@ -1378,7 +1316,7 @@ function LiveConsole({
                 </button>
               </>
             )}
-            <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={resetCurrent} aria-label="Reset timer" title="Reset (R)">
+            <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={resetCurrent} aria-label="Reset timer" title="Reset timer">
               <RotateCcw size={13} />
               {isPanel ? " Reset panel" : ""}
             </button>
@@ -1406,16 +1344,74 @@ function LiveConsole({
             </small>
           </div>
 
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              className="flex min-h-12 min-w-0 items-center gap-2 rounded-field border border-line bg-white px-3 py-2 text-left text-text-muted transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-violet/30 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!previousPart}
+              onClick={() => handleJumpTo(segmentIndex - 1)}
+              title="Previous part"
+            >
+              <SkipBack size={14} />
+              <span className="grid min-w-0 text-left">
+                <small className="text-[12px] font-semibold text-text-subtle">Previous</small>
+                <span className="truncate text-[13px] font-semibold">
+                  {previousPart?.speaker || "First part"}
+                </span>
+              </span>
+            </button>
+            <button
+              className="flex min-h-12 min-w-0 items-center justify-end gap-2 rounded-field border border-transparent bg-violet px-3 py-2 text-right text-white transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-[0_10px_24px_rgba(103,69,220,0.28)] disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!nextPart}
+              onClick={() => handleJumpTo(segmentIndex + 1)}
+              title="Next part"
+            >
+              <span className="grid min-w-0 text-right">
+                <small className="text-[12px] font-semibold text-white/70">
+                  {isPanel ? "Next panelist" : "Next part"}
+                </small>
+                <span className="truncate text-[13px] font-semibold">
+                  {nextPart?.speaker || "Last part"}
+                </span>
+              </span>
+              <SkipForward size={14} />
+            </button>
+          </div>
+
+          {/* Only a panel has parts worth skipping past as a group. */}
+          {isPanel && nextItemSegmentIndex >= 0 && (
+            <button
+              className="flex min-h-11 w-full items-center gap-2 rounded-field border border-violet/22 bg-surface-hover px-3 py-2 text-left text-violet-dark transition-[border-color,box-shadow] duration-150 hover:border-violet/40"
+              onClick={() => handleJumpTo(nextItemSegmentIndex)}
+              title="Skip the rest of this panel"
+            >
+              <FastForward size={14} />
+              <span className="grid min-w-0 text-left">
+                <small className="text-[12px] font-semibold text-violet-dark/75">
+                  Skip the rest of the panel
+                </small>
+                <span className="truncate text-[13px] font-semibold">{itemLabel(nextItem)}</span>
+              </span>
+            </button>
+          )}
+
           {/*
             * Pairing code for the Zoom App. Copied here, pasted into the app's
             * panel inside a meeting, where it publishes this event's speaker
             * countdown to every participant.
             */}
-          <div className="grid gap-2 rounded-field border border-line bg-surface-raised px-3.5 py-3">
-            <span className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
-              <Video size={12} aria-hidden />
-              Zoom code
-            </span>
+          <details className="group rounded-field border border-line bg-surface-raised">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-2.5 marker:content-none">
+              <span className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
+                <Video size={12} aria-hidden />
+                Zoom code
+              </span>
+              <ChevronDown
+                size={14}
+                aria-hidden
+                className="text-text-subtle transition-transform duration-150 group-open:rotate-180"
+              />
+            </summary>
+            <div className="grid gap-2 border-t border-line-soft px-3.5 py-3">
             {event.zoomToken ? (
               <div className="flex items-center justify-between gap-2">
                 <strong className="tabular font-mono text-[15px] font-semibold tracking-[0.06em] text-ink">
@@ -1448,11 +1444,11 @@ function LiveConsole({
             <p className="sr-only" role="status" aria-live="polite">
               {zoomCopied ? "Zoom code copied to clipboard" : ""}
             </p>
-          </div>
+            </div>
+          </details>
 
           <ControllerAccessCard
             eventId={event.id}
-            eventName={event.name}
             loginName={loginName}
             onSignOut={() => {
               setAccessError("");
@@ -1475,56 +1471,6 @@ function LiveConsole({
             }}
             onDelete={() => setConfirmingDelete(true)}
           />
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              className="flex min-h-12 min-w-0 items-center gap-2 rounded-field border border-line bg-white px-3 py-2 text-left text-text-muted transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-violet/30 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!previousPart}
-              onClick={() => handleJumpTo(segmentIndex - 1)}
-              title="Previous part (←)"
-            >
-              <SkipBack size={14} />
-              <span className="grid min-w-0 text-left">
-                <small className="text-[12px] font-semibold text-text-subtle">Previous</small>
-                <span className="truncate text-[13px] font-semibold">
-                  {previousPart?.speaker || "First part"}
-                </span>
-              </span>
-            </button>
-            <button
-              className="flex min-h-12 min-w-0 items-center justify-end gap-2 rounded-field border border-transparent bg-violet px-3 py-2 text-right text-white transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-[0_10px_24px_rgba(103,69,220,0.28)] disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!nextPart}
-              onClick={() => handleJumpTo(segmentIndex + 1)}
-              title="Next part (→)"
-            >
-              <span className="grid min-w-0 text-right">
-                <small className="text-[12px] font-semibold text-white/70">
-                  {isPanel ? "Next panelist" : "Next part"}
-                </small>
-                <span className="truncate text-[13px] font-semibold">
-                  {nextPart?.speaker || "Last part"}
-                </span>
-              </span>
-              <SkipForward size={14} />
-            </button>
-          </div>
-
-          {/* Only a panel has parts worth skipping past as a group. */}
-          {isPanel && nextItemSegmentIndex >= 0 && (
-            <button
-              className="flex min-h-11 w-full items-center gap-2 rounded-field border border-violet/22 bg-surface-hover px-3 py-2 text-left text-violet-dark transition-[border-color,box-shadow] duration-150 hover:border-violet/40"
-              onClick={() => handleJumpTo(nextItemSegmentIndex)}
-              title="Skip the rest of this panel (S)"
-            >
-              <FastForward size={14} />
-              <span className="grid min-w-0 text-left">
-                <small className="text-[12px] font-semibold text-violet-dark/75">
-                  Skip the rest of the panel
-                </small>
-                <span className="truncate text-[13px] font-semibold">{itemLabel(nextItem)}</span>
-              </span>
-            </button>
-          )}
 
           {isFocused && upcomingItems.length > 0 && (
             <div className="rounded-field border border-line bg-surface-raised px-3.5 py-3">
@@ -1578,29 +1524,6 @@ function LiveConsole({
         onCancel={() => setConfirmingEnd(false)}
       />
     </main>
-  );
-}
-
-/** Silences the end chime for one clock. */
-function MuteToggle({
-  muted,
-  label,
-  onToggle,
-}: {
-  muted: boolean;
-  label: string;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      className={cn("grid size-6 place-items-center rounded-[7px] bg-white/70 transition-colors duration-150 hover:bg-white", muted ? "text-text-subtle" : "text-violet-dark")}
-      onClick={onToggle}
-      aria-pressed={muted}
-      aria-label={muted ? `Unmute the ${label}` : `Mute the ${label}`}
-      title={muted ? "Chime off" : "Chime on"}
-    >
-      {muted ? <BellOff size={13} /> : <Bell size={13} />}
-    </button>
   );
 }
 
