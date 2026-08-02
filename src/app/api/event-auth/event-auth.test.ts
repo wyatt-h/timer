@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createMigratedDatabase, one, rows, type TestDatabase } from "@/test/pg";
 import { createPgSupabaseClient } from "@/test/pg-supabase";
-import { normalizeLoginName } from "@/lib/event-auth/login-name";
+import { suggestLoginName } from "@/lib/event-auth/login-name";
 import type { TimerEvent } from "@/lib/types";
 
 let db: TestDatabase;
@@ -121,7 +121,7 @@ function applyCookies(
 async function createEvent(
   name = "Summit",
   password = PASSWORD,
-  loginName = normalizeLoginName(name),
+  loginName = suggestLoginName(name),
 ) {
   const event = await draftEvent(name);
   const response = await createRoute(
@@ -148,12 +148,12 @@ describe("event creation", () => {
     const { response, body, event } = await createEvent(
       "Global Call 2026",
       PASSWORD,
-      "  GLOBAL   CONTROL  ",
+      "  GLOBAL-CONTROL  ",
     );
 
     expect(response.status).toBe(201);
     expect(Object.keys(body).sort()).toEqual(["event", "loginName", "version"]);
-    expect(body.loginName).toBe("global control");
+    expect(body.loginName).toBe("global-control");
     expect(body).not.toHaveProperty("recoveryCode");
     expect(JSON.stringify(body)).not.toMatch(/team/i);
 
@@ -162,7 +162,7 @@ describe("event creation", () => {
       `select login_name, password_hash from public.event_access where event_id = $1`,
       [event.id],
     );
-    expect(access?.login_name).toBe("global control");
+    expect(access?.login_name).toBe("global-control");
     expect(access?.password_hash).toMatch(/^scrypt\$/);
     expect(access?.password_hash).not.toContain(PASSWORD);
 
@@ -178,8 +178,8 @@ describe("event creation", () => {
   });
 
   it("rejects login names that canonicalize to the same identifier", async () => {
-    await createEvent("Global Call", PASSWORD, "event controller");
-    const duplicate = await createEvent("Different Display Name", PASSWORD, " EVENT   CONTROLLER ");
+    await createEvent("Global Call", PASSWORD, "event-controller");
+    const duplicate = await createEvent("Different Display Name", PASSWORD, " EVENT-CONTROLLER ");
 
     expect(duplicate.response.status).toBe(409);
     expect(duplicate.body.error).toBe("login_taken");
@@ -203,13 +203,20 @@ describe("event creation", () => {
     }
     expect((await one<{ count: number }>(db, `select count(*)::int as count from public.events`))?.count).toBe(0);
   });
+
+  it("rejects spaces and special characters in new login names", async () => {
+    for (const loginName of ["global call", "global_call", "global!", "global--call", "-global"]) {
+      expect((await createEvent("Display name", PASSWORD, loginName)).response.status).toBe(400);
+    }
+    expect((await one<{ count: number }>(db, `select count(*)::int as count from public.events`))?.count).toBe(0);
+  });
 });
 
 describe("opening an event", () => {
-  it("accepts ordinary differences in case and whitespace", async () => {
+  it("accepts ordinary differences in case and surrounding whitespace", async () => {
     const created = await createEvent("Global Call");
     cookieJar.clear();
-    const opened = await login("  global   CALL  ");
+    const opened = await login("  GLOBAL-CALL  ");
 
     expect(opened.response.status).toBe(200);
     expect((opened.body.event as TimerEvent).id).toBe(created.event.id);
@@ -219,8 +226,8 @@ describe("opening an event", () => {
   it("answers an unknown event and a wrong password identically", async () => {
     await createEvent("Global Call");
     cookieJar.clear();
-    const unknown = await login("No such event");
-    const wrong = await login("Global Call", "wrong-password");
+    const unknown = await login("no-such-event");
+    const wrong = await login("global-call", "wrong-password");
 
     expect([unknown.response.status, wrong.response.status]).toEqual([401, 401]);
     expect(unknown.body).toEqual(wrong.body);
@@ -234,7 +241,7 @@ describe("opening an event", () => {
 
 describe("event writes", () => {
   it("renames the event without changing its login name", async () => {
-    const created = await createEvent("Global Call", PASSWORD, "global controller");
+    const created = await createEvent("Global Call", PASSWORD, "global-controller");
     const renamed = { ...created.event, name: "Leadership Q&A" };
     const response = await eventRoute.PUT(
       jsonRequest(`http://localhost/api/events/${created.event.id}`, {
@@ -246,18 +253,18 @@ describe("event writes", () => {
 
     expect(response.status).toBe(200);
     expect((await read(response)).version).toBe(1);
-    expect((await one<{ login_name: string }>(db, `select login_name from public.event_access`))?.login_name).toBe("global controller");
+    expect((await one<{ login_name: string }>(db, `select login_name from public.event_access`))?.login_name).toBe("global-controller");
 
     cookieJar.clear();
-    expect((await login("global controller")).response.status).toBe(200);
+    expect((await login("global-controller")).response.status).toBe(200);
     expect((await login("Leadership Q&A")).response.status).toBe(401);
   });
 
   it("allows duplicate display names when login names differ", async () => {
-    const alpha = await createEvent("Alpha", PASSWORD, "alpha login");
-    await createEvent("Bravo", PASSWORD, "bravo login");
+    const alpha = await createEvent("Alpha", PASSWORD, "alpha-login");
+    await createEvent("Bravo", PASSWORD, "bravo-login");
     cookieJar.clear();
-    await login("alpha login");
+    await login("alpha-login");
 
     const response = await eventRoute.PUT(
       jsonRequest(`http://localhost/api/events/${alpha.event.id}`, {
@@ -275,7 +282,7 @@ describe("event writes", () => {
     const created = await createEvent("Summit");
     const firstToken = cookieJar.get(sessionCookieName(created.event.id))!;
     cookieJar.clear();
-    await login("Summit");
+    await login("summit");
     const secondToken = cookieJar.get(sessionCookieName(created.event.id))!;
 
     cookieJar.set(sessionCookieName(created.event.id), firstToken);

@@ -2,7 +2,7 @@
  * Timer database validator
  *
  * Run this entire file in Supabase Dashboard -> SQL Editor after applying
- * 20260801030000_reusable_event_invites.sql.
+ * 20260801040000_slug_event_login_names.sql.
  *
  * READ-ONLY: this script creates, changes, and deletes nothing. It returns one
  * result table. The SUMMARY row must be PASS and every other row should be PASS.
@@ -251,10 +251,10 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     exists (
       select 1
       from supabase_migrations.schema_migrations
-      where version = '20260801030000'
+      where version = '20260801040000'
     ),
     'FAIL',
-    'Expected version 20260801030000 in supabase_migrations.schema_migrations'
+    'Expected version 20260801040000 in supabase_migrations.schema_migrations'
 
   union all
   select
@@ -402,9 +402,14 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
         select 1 from pg_constraint
         where conrelid = 'public.event_access'::regclass and contype = 'c'
           and pg_get_constraintdef(oid) like '%password_version%'
+      )
+      and exists (
+        select 1 from pg_constraint
+        where conrelid = 'public.event_access'::regclass and contype = 'c'
+          and conname = 'event_access_login_name_slug_check'
       ),
     'FAIL',
-    'events.version must default to 0; login names and password versions must be constrained'
+    'events.version must default to 0; new login names must be slug-shaped; password versions must be constrained'
 
   union all
   select

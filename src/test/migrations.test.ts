@@ -38,6 +38,7 @@ const ACCESS_MIGRATION = "20260801000000_simplify_event_access.sql";
 const INVITE_MIGRATION = "20260801010000_event_invites.sql";
 const LOGIN_NAME_MIGRATION = "20260801020000_separate_event_login_name.sql";
 const REUSABLE_INVITE_MIGRATION = "20260801030000_reusable_event_invites.sql";
+const LOGIN_NAME_SLUG_MIGRATION = "20260801040000_slug_event_login_names.sql";
 const VALIDATOR = fileURLToPath(
   new URL("../../supabase/validate_event_controller_database.sql", import.meta.url),
 );
@@ -48,7 +49,7 @@ describe("the complete migration history", () => {
     // first failure, so reaching this point is the assertion. Named explicitly
     // because it is the check that guards against an unrunnable migration.
     const files = migrationFiles();
-    expect(files.at(-1)).toBe(REUSABLE_INVITE_MIGRATION);
+    expect(files.at(-1)).toBe(LOGIN_NAME_SLUG_MIGRATION);
     expect(files).toEqual([...files].sort());
 
     const tables = await rows<{ table_name: string }>(
@@ -85,7 +86,7 @@ describe("the complete migration history", () => {
       create schema if not exists supabase_migrations;
       create table if not exists supabase_migrations.schema_migrations (version text primary key);
       insert into supabase_migrations.schema_migrations (version)
-      values ('20260801030000') on conflict do nothing;
+      values ('20260801040000') on conflict do nothing;
     `);
     const report = await rows<{ area: string; status: string; details: string }>(
       db,
@@ -349,6 +350,7 @@ describe("existing-row safety", () => {
       INVITE_MIGRATION,
       LOGIN_NAME_MIGRATION,
       REUSABLE_INVITE_MIGRATION,
+      LOGIN_NAME_SLUG_MIGRATION,
     ].includes(name))) {
       await legacy.exec(readMigration(file));
     }
@@ -401,6 +403,7 @@ describe("existing-row safety", () => {
       INVITE_MIGRATION,
       LOGIN_NAME_MIGRATION,
       REUSABLE_INVITE_MIGRATION,
+      LOGIN_NAME_SLUG_MIGRATION,
     ].includes(name))) {
       await legacy.exec(readMigration(file));
     }
@@ -555,9 +558,10 @@ describe("controller event functions", () => {
     expect(after?.count).toBe(before?.count);
   });
 
-  it("canonicalizes the separately chosen login name", async () => {
-    const { result } = await create("A display name", {}, "  Bad_Name  ");
-    expect((result.payload as Record<string, unknown>).loginName).toBe("bad_name");
+  it("enforces slug-shaped login names on newly inserted credentials", async () => {
+    await expect(create("A display name", {}, "bad_name")).rejects.toThrow(
+      /event_access_login_name_slug_check/,
+    );
   });
 
   it("increments the version on a matching write and refuses a stale one", async () => {
@@ -901,7 +905,7 @@ describe("sessions", () => {
         ],
         runtime: { status: "ready", segmentIndex: 0, remainingSeconds: 600 },
       }),
-      eventName,
+      eventName.toLowerCase().replace(/\s+/gu, "-"),
       "scrypt$p",
       tokenHash,
       ttlSeconds,
@@ -1019,7 +1023,7 @@ describe("reusable event invitations", () => {
         }],
         runtime: { status: "ready", segmentIndex: 0, remainingSeconds: 600 },
       }),
-      eventName,
+      eventName.toLowerCase().replace(/\s+/gu, "-"),
       "scrypt$p",
       (await newUuid(db)).replace(/-/g, "").padEnd(64, "0"),
     ]);

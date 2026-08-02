@@ -3,12 +3,12 @@
 The final Timer access model has no teams, user accounts, or recovery codes. Each
 event is opened with:
 
-- its separately chosen lowercase login name; and
+- its separately chosen login name made from lowercase letters, numbers, and dashes; and
 - a password of at least six characters.
 
 The visible event title is independent and can be changed without changing the
-login. The database canonicalizes login names by trimming, collapsing whitespace,
-and lowercasing them.
+login. New login names contain no spaces or special characters. Older credentials
+that predate this rule remain usable.
 
 A signed-in controller can also create a reusable invitation. The raw token is
 never stored in PostgreSQL; its hash expires after 24 hours and can issue an
@@ -29,6 +29,9 @@ migrations are:
    name from the editable event title.
 5. `20260801030000_reusable_event_invites.sql` — keeps each invitation valid for
    multiple redemptions until it expires, is revoked, or is replaced.
+6. `20260801040000_slug_event_login_names.sql` — requires every newly inserted
+   login name to use lowercase letters, numbers, and single dashes while preserving
+   pre-existing credential rows.
 
 Do not edit a migration that has already been applied. Add a new forward migration
 for future schema changes.
@@ -42,8 +45,8 @@ npx supabase@latest projects list
 npx supabase@latest migration list
 ```
 
-The separation migration retains every existing login name, so it does not need
-to rewrite event or credential rows.
+The separation and slug migrations retain every existing login name, so neither
+needs to rewrite event or credential rows.
 
 ## Apply
 

@@ -64,7 +64,7 @@ export function CredentialsFields({
         disabled={disabled}
         required
         autoComplete="username"
-        supportingText="Lowercase name used with the password. It can be different from the event title."
+        supportingText="Use lowercase letters, numbers, and dashes only. No spaces or special characters."
         aria-invalid={Boolean(loginNameError)}
         errorText={loginNameError ?? ""}
         onValueChange={(loginName) =>

@@ -29,6 +29,34 @@ describe("EventEditor", () => {
     expect(html).not.toContain("-speaker-name");
   });
 
+  it("requires empty, valid event access before opening the new-event editor", async () => {
+    render(<EventEditor />);
+
+    expect(await screen.findByRole("heading", { name: "Set access for new event" })).toBeInTheDocument();
+    const loginName = screen.getByLabelText("Event login name") as HTMLElement & {
+      value: string;
+    };
+    expect(loginName.getAttribute("value") ?? "").toBe("");
+    expect(screen.queryByLabelText("Event name")).not.toBeInTheDocument();
+
+    loginName.value = "event-access";
+    fireEvent.input(loginName);
+
+    const password = screen.getByLabelText("Event password") as HTMLElement & { value: string };
+    password.value = "123456";
+    fireEvent.input(password);
+    const confirmation = screen.getByLabelText("Repeat the password") as HTMLElement & {
+      value: string;
+    };
+    confirmation.value = "123456";
+    fireEvent.input(confirmation);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue to event details" }));
+
+    expect(await screen.findByLabelText("Event name")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change access" })).toBeInTheDocument();
+  });
+
   it("lets both Return to control buttons navigate without requiring a save", async () => {
     const event = makeEvent("Live event");
     event.status = "live";

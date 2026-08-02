@@ -23,7 +23,6 @@ import { makeEvent } from "@/lib/store";
 import { useControllerEvent } from "@/lib/controller/use-controller-event";
 import { createControllerEvent } from "@/lib/event-auth/client";
 import { rememberEvent } from "@/lib/event-auth/local-events";
-import { normalizeLoginName } from "@/lib/event-auth/login-name";
 import { agendaFormSchema, type AgendaFormValues } from "@/lib/agenda-schema";
 import { toAgendaItems, toFormValues } from "@/lib/agenda-mapping";
 import type { TimerEvent } from "@/lib/types";
@@ -36,8 +35,9 @@ function editorSnapshot(name: string, date: string, agenda: AgendaFormValues) {
 const EMPTY_AGENDA: AgendaFormValues = { agendaItems: [] };
 
 /*
- * A new event is not saved anywhere until it has credentials, so the builder ends
- * with a separate lowercase login name and password.
+ * A new event is not saved anywhere until it has credentials. Access is chosen
+ * before the builder opens, so nobody can spend time editing an event that has
+ * no controller login ready to own it.
  */
 type Stage = "editing" | "credentials";
 
@@ -62,9 +62,11 @@ export function EventEditor() {
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
   const [saveNoticeVisible, setSaveNoticeVisible] = useState(false);
   const [saveNoticeArmed, setSaveNoticeArmed] = useState(false);
-  const [stage, setStage] = useState<Stage>("editing");
+  const [stage, setStage] = useState<Stage>(() => (isEditing ? "editing" : "credentials"));
   const [credentials, setCredentials] = useState<CredentialsDraft>(EMPTY_CREDENTIALS);
   const [credentialsTouched, setCredentialsTouched] = useState(false);
+  const [accessConfirmed, setAccessConfirmed] = useState(isEditing);
+  const [retryingCreation, setRetryingCreation] = useState(false);
   /** Whether the create step should also start the event once it exists. */
   const [pendingStart, setPendingStart] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -83,6 +85,8 @@ export function EventEditor() {
       setAgenda(storedAgenda);
       setSavedSnapshot(editorSnapshot(storedDraft.name, storedDraft.date, storedAgenda));
       setHydratedId(eventId ?? "new");
+      setStage(eventId ? "editing" : "credentials");
+      setAccessConfirmed(Boolean(eventId));
     });
   }, [eventId, existing, hydratedId]);
 
@@ -202,21 +206,10 @@ export function EventEditor() {
     const next = buildNext(start);
     if (!next) return;
 
-    /*
-     * A brand new event has nowhere to be saved yet. It needs the controller
-     * credentials that will own it, so the builder hands over to that step rather
-     * than writing an event only this browser would ever be able to see.
-     */
+    // New-event access was confirmed before the builder opened.
     if (!isEditing) {
-      setCredentials((current) =>
-        current.loginName
-          ? current
-          : { ...current, loginName: normalizeLoginName(next.name) },
-      );
       setPendingStart(start);
-      setStage("credentials");
-      setCreateError("");
-      setCredentialsTouched(false);
+      void createEvent(start, next);
       return;
     }
 
@@ -248,8 +241,8 @@ export function EventEditor() {
   }
 
   /** Creates the event, its password and this device's session at once. */
-  async function createEvent(start: boolean) {
-    const next = buildNext(start);
+  async function createEvent(start: boolean, preparedEvent?: TimerEvent) {
+    const next = preparedEvent ?? buildNext(start);
     if (!next) return;
 
     setCredentialsTouched(true);
@@ -270,6 +263,8 @@ export function EventEditor() {
 
     if (!result.ok) {
       setCreateError(result.message);
+      setRetryingCreation(true);
+      setStage("credentials");
       return;
     }
 
@@ -283,15 +278,30 @@ export function EventEditor() {
     router.push(start ? `/events/${result.data.event.id}` : "/");
   }
 
+  function continueFromAccess() {
+    setCredentialsTouched(true);
+    const problem = credentialsProblem(credentials);
+    if (problem) {
+      setCreateError(problem);
+      return;
+    }
+
+    setCreateError("");
+    if (retryingCreation) {
+      void createEvent(pendingStart);
+      return;
+    }
+
+    setAccessConfirmed(true);
+    setStage("editing");
+  }
+
   const programmeSeconds = currentAgenda.agendaItems.reduce(
     (sum, item) => sum + item.durationMinutes * 60,
     0,
   );
 
-  /*
-   * The password step replaces the builder rather than floating over it. A new
-   * event does not exist until its password and first session are created.
-   */
+  /* Access replaces the builder until valid credentials have been chosen. */
   if (stage !== "editing" && draft) {
     return (
       <main className="min-h-svh bg-paper" id="main">
@@ -303,23 +313,35 @@ export function EventEditor() {
                   variant="ghost"
                   size="sm"
                   className="-ml-3"
-                  onClick={() => setStage("editing")}
+                  onClick={() => {
+                    if (accessConfirmed) {
+                      setRetryingCreation(false);
+                      setCreateError("");
+                      setStage("editing");
+                      return;
+                    }
+                    router.push("/");
+                  }}
                   disabled={creating}
                 >
                   <ArrowLeft size={15} aria-hidden />
-                  Back to the run of show
+                  {accessConfirmed ? "Back to event details" : "Home"}
                 </Button>
                 <h1 className="mt-3 text-[24px] font-semibold tracking-[-0.04em]">
-                  Set access for {draft.name.trim() || "this event"}
+                  Set access for {accessConfirmed ? draft.name.trim() || "this event" : "new event"}
                 </h1>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">
-                  Choose a lowercase login name and password for opening this event on another device.
+                  Choose the login name and password before editing the event. You can use them to
+                  open its controller on another device.
                 </p>
               </div>
 
               <CredentialsFields
                 draft={credentials}
-                onChange={setCredentials}
+                onChange={(nextCredentials) => {
+                  setCredentials(nextCredentials);
+                  setCreateError("");
+                }}
                 showErrors={credentialsTouched}
                 disabled={creating}
               />
@@ -336,13 +358,17 @@ export function EventEditor() {
               <Button
                 variant="primary"
                 disabled={creating}
-                onClick={() => void createEvent(pendingStart)}
+                onClick={continueFromAccess}
               >
                 {creating
                   ? "Creating the event…"
-                  : pendingStart
-                    ? "Create and start the event"
-                    : "Create the event"}
+                  : retryingCreation
+                    ? pendingStart
+                      ? "Create and start the event"
+                      : "Create the event"
+                    : accessConfirmed
+                      ? "Save access and return"
+                      : "Continue to event details"}
               </Button>
           </Card>
         </div>
@@ -435,12 +461,29 @@ export function EventEditor() {
                   Unsaved changes
                 </span>
               )}
-              <Button variant="secondary" onClick={() => save(false)}>
+              {!isEditing && (
+                <Button
+                  variant="ghost"
+                  disabled={creating}
+                  onClick={() => {
+                    setRetryingCreation(false);
+                    setCreateError("");
+                    setStage("credentials");
+                  }}
+                >
+                  Change access
+                </Button>
+              )}
+              <Button variant="secondary" disabled={creating} onClick={() => save(false)}>
                 {isEditing ? "Save changes" : "Save event"}
               </Button>
             </div>
-            <Button variant="primary" onClick={handlePrimaryAction}>
-              {draft.status === "live" ? "Return to control" : "Start event"}
+            <Button variant="primary" disabled={creating} onClick={handlePrimaryAction}>
+              {creating
+                ? "Creating…"
+                : draft.status === "live"
+                  ? "Return to control"
+                  : "Start event"}
             </Button>
           </div>
         </div>
@@ -511,8 +554,12 @@ export function EventEditor() {
                 </dl>
               </div>
 
-              <Button className="mt-4 w-full" variant="primary" onClick={handlePrimaryAction}>
-                {draft.status === "live" ? "Return to control" : "Start event"}
+              <Button className="mt-4 w-full" variant="primary" disabled={creating} onClick={handlePrimaryAction}>
+                {creating
+                  ? "Creating…"
+                  : draft.status === "live"
+                    ? "Return to control"
+                    : "Start event"}
               </Button>
             </Card>
           </aside>

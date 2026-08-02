@@ -11,6 +11,7 @@ import {
   loginNameProblem,
   normalizeLoginName,
   sanitizeLoginNameInput,
+  suggestLoginName,
 } from "@/lib/event-auth/login-name";
 import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/event-auth/password-rules";
 import type { TimerEvent } from "@/lib/types";
@@ -38,7 +39,7 @@ export function ImportCredentialsPanel({
 }) {
   const [password, setPassword] = useState("");
   const [loginNames, setLoginNames] = useState<Record<string, string>>(() =>
-    Object.fromEntries(events.map((event) => [event.id, normalizeLoginName(event.name)])),
+    Object.fromEntries(events.map((event) => [event.id, suggestLoginName(event.name)])),
   );
   const [confirmPassword, setConfirmPassword] = useState("");
   const [touched, setTouched] = useState(false);
@@ -138,8 +139,8 @@ export function ImportCredentialsPanel({
           Password for {events.length} event{events.length === 1 ? "" : "s"}
         </h2>
         <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">
-          Give each imported event a lowercase login name. Use that login name and this password
-          to open it on another device.
+          Give each imported event a login name made from lowercase letters, numbers, and dashes.
+          Use that login name and this password to open it on another device.
         </p>
       </div>
 
@@ -156,7 +157,7 @@ export function ImportCredentialsPanel({
               required
               disabled={busy}
               autoComplete="off"
-              supportingText="Lowercase name used to sign in."
+              supportingText="Lowercase letters, numbers, and dashes only."
               aria-invalid={Boolean(problem)}
               errorText={problem ?? ""}
               onValueChange={(value) =>

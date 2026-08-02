@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { EventAuthError } from "@/lib/event-auth/errors";
-import { isLoginName, normalizeLoginName } from "@/lib/event-auth/login-name";
+import { isLoginNameLookup, normalizeLoginName } from "@/lib/event-auth/login-name";
 import { findAccessByLoginName, loadControllerEvent } from "@/lib/server/event-store";
 import { verifyAgainstDecoy, verifySecret } from "@/lib/server/password";
 import { clearAttempts, enforceRateLimit } from "@/lib/server/rate-limit";
@@ -33,11 +33,11 @@ export async function POST(request: Request) {
     await enforceRateLimit("login", loginName, request);
 
     /*
-     * A name that cannot satisfy the rules cannot exist, but it is answered as a
-     * failed sign-in rather than a malformed request: the shape of a username is
-     * not something a failed attempt should confirm.
+     * New names use the slug rule, while a bounded legacy shape remains eligible
+     * for lookup. Anything else is answered as a failed sign-in rather than a
+     * malformed request: username shape is not something an attempt should confirm.
      */
-    const access = isLoginName(loginName) ? await findAccessByLoginName(loginName) : null;
+    const access = isLoginNameLookup(loginName) ? await findAccessByLoginName(loginName) : null;
     if (!access) {
       await verifyAgainstDecoy(password);
       throw new EventAuthError("invalid_credentials");
