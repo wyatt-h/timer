@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { FormEvent } from "react";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventEditor } from "@/components/event-editor";
@@ -79,5 +80,28 @@ describe("EventEditor", () => {
     navigation.push.mockClear();
     fireEvent.click(buttons[1]);
     expect(navigation.push).toHaveBeenLastCalledWith(`/events/${event.id}`);
+  });
+
+  it("saves an existing event without submitting an ancestor form or navigating home", async () => {
+    const event = makeEvent("Original event");
+    navigation.params = { eventId: event.id };
+    window.localStorage.setItem(
+      `aura:event:${event.id}`,
+      JSON.stringify({ event, version: 3, cachedAt: Date.now() }),
+    );
+    const submitted = vi.fn<(event: FormEvent) => void>((formEvent) => {
+      formEvent.preventDefault();
+    });
+
+    render(
+      <form onSubmit={submitted}>
+        <EventEditor />
+      </form>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+
+    expect(submitted).not.toHaveBeenCalled();
+    expect(navigation.push).not.toHaveBeenCalled();
   });
 });
