@@ -64,7 +64,7 @@ export function AudienceDisplay() {
   const [remaining, setRemaining] = useState(runtime?.remainingSeconds ?? 0);
   const [panelRemaining, setPanelRemaining] = useState(runtime?.panelRemainingSeconds ?? 0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { play, unlock, disable, isReady } = useChime();
+  const { play, disable, isReady } = useChime();
   const [chimePreset, setChimePreset] = useState<ChimePreset>("feather");
   const [soundPickerOpen, setSoundPickerOpen] = useState(false);
   const soundPicker = useRef<HTMLDivElement>(null);
@@ -195,10 +195,9 @@ export function AudienceDisplay() {
 
   const previewChime = useCallback(
     async (preset: ChimePreset) => {
-      const ready = isReady || (await unlock());
-      if (ready) await play(preset);
+      await play(preset);
     },
-    [isReady, play, unlock],
+    [play],
   );
 
   const chooseChime = useCallback(
@@ -281,7 +280,7 @@ export function AudienceDisplay() {
         />
       )}
 
-      <header className="relative z-2 flex items-center justify-between text-[12px] text-[#8f8e99]">
+      <header className="relative z-30 flex items-center justify-between text-[12px] text-[#8f8e99]">
         <BrandMark light />
         {/*
           * The poll failed, so nothing is known. The timer stays on screen — it is

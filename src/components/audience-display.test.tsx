@@ -110,7 +110,7 @@ describe("AudienceDisplay", () => {
     expect(audienceTestState.disable).toHaveBeenCalledOnce();
   });
 
-  it("enables audio and plays the selected sound as audible confirmation", async () => {
+  it("enables audio and plays the selected sound in the same user gesture", async () => {
     audienceTestState.isReady = false;
     render(<AudienceDisplay />);
 
@@ -119,9 +119,9 @@ describe("AudienceDisplay", () => {
     );
 
     await waitFor(() => {
-      expect(audienceTestState.unlock).toHaveBeenCalledOnce();
       expect(audienceTestState.play).toHaveBeenCalledWith("feather");
     });
+    expect(audienceTestState.unlock).not.toHaveBeenCalled();
   });
 
   it("plays the alarm when a running speaker crosses zero", async () => {
@@ -159,7 +159,14 @@ describe("AudienceDisplay", () => {
     expect(audienceTestState.play).toHaveBeenCalledWith("warm");
   });
 
-  it("saves the selected alarm sound and previews it", () => {
+  it("keeps the open sound picker above the timer controls", () => {
+    render(<AudienceDisplay />);
+
+    expect(screen.getByRole("banner")).toHaveClass("z-30");
+  });
+
+  it("saves the selected alarm sound and previews it on the first click", async () => {
+    audienceTestState.isReady = false;
     render(<AudienceDisplay />);
 
     fireEvent.click(
@@ -171,8 +178,10 @@ describe("AudienceDisplay", () => {
       screen.getByRole("button", { name: "Select Airy glass" }),
     );
 
-    expect(window.localStorage.getItem("timer:audience-chime")).toBe("airy");
-    expect(audienceTestState.play).toHaveBeenCalledWith("airy");
+    await waitFor(() => {
+      expect(window.localStorage.getItem("timer:audience-chime")).toBe("airy");
+      expect(audienceTestState.play).toHaveBeenCalledWith("airy");
+    });
     expect(
       screen.getByRole("button", {
         name: "Choose alarm sound. Current: Airy glass",
