@@ -271,7 +271,7 @@ describe("commands", () => {
       timer: {
         action: "start",
         direction: "down",
-        start: 300_399,
+        start: 298_400,
         withSound: false,
         countNegativeAfterAlarm: true,
         showNotification: false,

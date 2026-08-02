@@ -159,9 +159,10 @@ describe("remaining seconds from authoritative state", () => {
   });
 
   it("preserves the tick boundary while matching the web display", () => {
-    expect(toZoomTimerUnits(299.2)).toBe(300_199);
-    expect(toZoomTimerUnits(10.01)).toBe(11_009);
-    expect(toZoomTimerUnits(10)).toBe(10_999);
+    expect(toZoomTimerUnits(299.2)).toBe(298_200);
+    expect(toZoomTimerUnits(10.01)).toBe(9_010);
+    expect(toZoomTimerUnits(10)).toBe(9_000);
+    expect(toZoomTimerUnits(0.5)).toBe(0);
     expect(toZoomTimerUnits(-0.5)).toBe(0);
     expect(toZoomTimerUnits(-12)).toBe(0);
   });
