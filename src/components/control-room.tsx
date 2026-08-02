@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   ChevronDown,
@@ -25,7 +26,7 @@ import {
   UsersRound,
   Video,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand-mark";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -340,6 +341,28 @@ export function LiveConsole({
     JSON.stringify(event.agenda),
   );
   const [agendaChangedElsewhere, setAgendaChangedElsewhere] = useState(false);
+  const [blockedNavigationNotice, setBlockedNavigationNotice] = useState(false);
+  const blockedNavigationTimer = useRef<number | null>(null);
+
+  const showBlockedNavigationNotice = useCallback(() => {
+    setBlockedNavigationNotice(true);
+    if (blockedNavigationTimer.current !== null) {
+      window.clearTimeout(blockedNavigationTimer.current);
+    }
+    blockedNavigationTimer.current = window.setTimeout(() => {
+      setBlockedNavigationNotice(false);
+      blockedNavigationTimer.current = null;
+    }, 3200);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (blockedNavigationTimer.current !== null) {
+        window.clearTimeout(blockedNavigationTimer.current);
+      }
+    },
+    [],
+  );
 
   const serverAgendaSnapshot = JSON.stringify(event.agenda);
 
@@ -637,6 +660,7 @@ export function LiveConsole({
     setAgendaDirty(false);
     setAgendaChangedElsewhere(false);
     setAgendaBaseSnapshot(JSON.stringify(savedAgenda));
+    setBlockedNavigationNotice(false);
   }
 
   function useLatestAgenda() {
@@ -644,6 +668,7 @@ export function LiveConsole({
     setAgendaDirty(false);
     setAgendaChangedElsewhere(false);
     setAgendaBaseSnapshot(serverAgendaSnapshot);
+    setBlockedNavigationNotice(false);
   }
 
   async function copyLink() {
@@ -1108,6 +1133,7 @@ export function LiveConsole({
       isRunning,
       segmentIndex,
       segments,
+      showBlockedNavigationNotice,
     ],
   );
 
@@ -1120,6 +1146,18 @@ export function LiveConsole({
       <p className="sr-only" role="status" aria-live="polite">
         {copied ? "Audience link copied to clipboard" : ""}
       </p>
+
+      {blockedNavigationNotice && (
+        <div
+          role="alert"
+          className="fixed top-24 left-1/2 z-50 flex w-[min(440px,calc(100vw-2rem))] -translate-x-1/2 items-start gap-2.5 rounded-card border border-caution/30 bg-white px-4 py-3 text-left shadow-[0_18px_48px_rgba(31,25,51,0.18)]"
+        >
+          <AlertTriangle className="mt-0.5 shrink-0 text-caution" size={17} aria-hidden />
+          <span className="text-[13px] leading-relaxed font-medium text-ink">
+            You have unresolved changes. Save or undo them before moving to another part.
+          </span>
+        </div>
+      )}
 
       {/*
         * Two groups: the way out on the left, everything to do with this
@@ -1272,13 +1310,13 @@ export function LiveConsole({
           {isPanel ? (
             <div className="grid gap-2.5">
               {/* The speaker leads: it is the clock that changes most often. */}
-              <div className={cn("rounded-control border border-success/20 bg-success-soft p-4 text-center transition-colors duration-200", speakerTone === "caution" && "border-caution/28 bg-caution-soft", speakerTone === "critical" && "border-over/30 bg-over-soft")}>
+              <div className={cn("rounded-control border border-line bg-surface-sunken p-4 text-center transition-colors duration-200", speakerTone === "caution" && "border-caution/28 bg-caution-soft", speakerTone === "critical" && "border-over/30 bg-over-soft")}>
                 <div className="mb-2 flex items-center justify-center gap-1.5">
                   <span className="text-[12px] font-bold tracking-[0.08em] text-text-subtle uppercase">
                     {current.speaker}
                   </span>
                 </div>
-                <strong className={cn("tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-success", speakerTone === "caution" && "text-caution", speakerTone === "critical" && "text-over")}>
+                <strong className={cn("tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-ink", speakerTone === "caution" && "text-caution", speakerTone === "critical" && "text-over")}>
                   {formatTimer(displaySeconds)}
                 </strong>
                 <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
@@ -1288,13 +1326,13 @@ export function LiveConsole({
                 </button>
                 <TimeNudge label={`Adjust time for ${current.speaker}`} onAdjust={adjustSpeaker} />
               </div>
-              <div className={cn("rounded-control border border-success/20 bg-success-soft p-4 text-center transition-colors duration-200", panelTone === "caution" && "border-caution/28 bg-caution-soft", panelTone === "critical" && "border-over/30 bg-over-soft")}>
+              <div className={cn("rounded-control border border-line bg-surface-sunken p-4 text-center transition-colors duration-200", panelTone === "caution" && "border-caution/28 bg-caution-soft", panelTone === "critical" && "border-over/30 bg-over-soft")}>
                 <div className="mb-2 flex items-center justify-center gap-1.5">
                   <span className="text-[12px] font-bold tracking-[0.08em] text-text-subtle uppercase">
                     Panel remaining
                   </span>
                 </div>
-                <strong className={cn("tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-success", panelTone === "caution" && "text-caution", panelTone === "critical" && "text-over")}>
+                <strong className={cn("tabular mb-2.5 block font-mono text-[44px] leading-none font-medium tracking-[-0.06em] text-ink", panelTone === "caution" && "text-caution", panelTone === "critical" && "text-over")}>
                   {formatTimer(panelDisplaySeconds)}
                 </strong>
                 <TimerProgress label="Panel progress" ratio={panelProgress} tone={panelTone} />
@@ -1306,13 +1344,13 @@ export function LiveConsole({
               </div>
             </div>
           ) : (
-            <div className={cn("rounded-control border border-success/20 bg-success-soft p-4 text-center transition-colors duration-200", speakerTone === "caution" && "border-caution/28 bg-caution-soft", speakerTone === "critical" && "border-over/30 bg-over-soft")}>
+            <div className={cn("rounded-control border border-line bg-surface-sunken p-4 text-center transition-colors duration-200", speakerTone === "caution" && "border-caution/28 bg-caution-soft", speakerTone === "critical" && "border-over/30 bg-over-soft")}>
               <div className="mb-2 flex items-center justify-center gap-1.5">
                 <span className="text-[12px] font-bold tracking-[0.08em] text-text-subtle uppercase">
                   {current.speaker}
                 </span>
               </div>
-              <strong className={cn("tabular mb-3 block font-mono text-[60px] leading-none font-medium tracking-[-0.06em] text-success", speakerTone === "caution" && "text-caution", speakerTone === "critical" && "text-over")}>
+              <strong className={cn("tabular mb-3 block font-mono text-[60px] leading-none font-medium tracking-[-0.06em] text-ink", speakerTone === "caution" && "text-caution", speakerTone === "critical" && "text-over")}>
                 {formatTimer(displaySeconds)}
               </strong>
               <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
@@ -1363,9 +1401,16 @@ export function LiveConsole({
 
           <div className="grid grid-cols-2 gap-2">
             <button
-              className="flex min-h-12 min-w-0 items-center gap-2 rounded-field border border-line bg-white px-3 py-2 text-left text-text-muted transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-violet/30 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!previousPart || agendaDirty}
-              onClick={() => handleJumpTo(segmentIndex - 1)}
+              className="flex min-h-12 min-w-0 items-center gap-2 rounded-field border border-line bg-white px-3 py-2 text-left text-text-muted transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-violet/30 disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:translate-y-0 aria-disabled:hover:border-line"
+              disabled={!previousPart}
+              aria-disabled={!previousPart || agendaDirty}
+              onClick={() => {
+                if (agendaDirty) {
+                  showBlockedNavigationNotice();
+                  return;
+                }
+                handleJumpTo(segmentIndex - 1);
+              }}
               title={agendaDirty ? "Save or undo changes before moving" : "Previous part"}
             >
               <SkipBack size={14} />
@@ -1377,9 +1422,16 @@ export function LiveConsole({
               </span>
             </button>
             <button
-              className="flex min-h-12 min-w-0 items-center justify-end gap-2 rounded-field border border-transparent bg-violet px-3 py-2 text-right text-white transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-[0_10px_24px_rgba(103,69,220,0.28)] disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!nextPart || agendaDirty}
-              onClick={() => handleJumpTo(segmentIndex + 1)}
+              className="flex min-h-12 min-w-0 items-center justify-end gap-2 rounded-field border border-transparent bg-violet px-3 py-2 text-right text-white transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-[0_10px_24px_rgba(103,69,220,0.28)] disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:translate-y-0 aria-disabled:hover:shadow-none"
+              disabled={!nextPart}
+              aria-disabled={!nextPart || agendaDirty}
+              onClick={() => {
+                if (agendaDirty) {
+                  showBlockedNavigationNotice();
+                  return;
+                }
+                handleJumpTo(segmentIndex + 1);
+              }}
               title={agendaDirty ? "Save or undo changes before moving" : "Next part"}
             >
               <span className="grid min-w-0 text-right">
@@ -1397,9 +1449,15 @@ export function LiveConsole({
           {/* Only a panel has parts worth skipping past as a group. */}
           {isPanel && nextItemSegmentIndex >= 0 && (
             <button
-              className="flex min-h-11 w-full items-center gap-2 rounded-field border border-violet/22 bg-surface-hover px-3 py-2 text-left text-violet-dark transition-[border-color,box-shadow] duration-150 hover:border-violet/40 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={agendaDirty}
-              onClick={() => handleJumpTo(nextItemSegmentIndex)}
+              className="flex min-h-11 w-full items-center gap-2 rounded-field border border-violet/22 bg-surface-hover px-3 py-2 text-left text-violet-dark transition-[border-color,box-shadow] duration-150 hover:border-violet/40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:border-violet/22"
+              aria-disabled={agendaDirty}
+              onClick={() => {
+                if (agendaDirty) {
+                  showBlockedNavigationNotice();
+                  return;
+                }
+                handleJumpTo(nextItemSegmentIndex);
+              }}
               title={agendaDirty ? "Save or undo changes before moving" : "Skip the rest of this panel"}
             >
               <FastForward size={14} />
@@ -1592,7 +1650,7 @@ function TimerProgress({
       <i
         className={cn(
           "block h-full origin-left rounded-full transition-transform duration-200 ease-linear",
-          tone === "critical" ? "bg-over" : tone === "caution" ? "bg-caution" : "bg-success",
+          tone === "critical" ? "bg-over" : tone === "caution" ? "bg-caution" : "bg-ink/55",
         )}
         style={{ transform: `scaleX(${ratio})` }}
       />

@@ -95,6 +95,14 @@ describe("AudienceDisplay", () => {
     expect(main!.style.backgroundImage).toContain("radial-gradient");
   });
 
+  it("uses the neutral timer color while more than 30 seconds remain", () => {
+    render(<AudienceDisplay />);
+
+    const clock = screen.getByText("10:00");
+    expect(clock).toHaveClass("text-[#f8f7fc]");
+    expect(clock).not.toHaveClass("text-[#4ade80]");
+  });
+
   it("lets the audience display turn its enabled sound back off", () => {
     render(<AudienceDisplay />);
 

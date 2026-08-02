@@ -133,7 +133,7 @@ describe("remaining seconds from authoritative state", () => {
     expect(result?.tone).toBe("caution");
   });
 
-  it("uses the same green, yellow, and red thresholds as the app", () => {
+  it("uses the same neutral, yellow, and red thresholds as the app", () => {
     expect(zoomIndicatorTone(31, 600)).toBe("normal");
     expect(zoomIndicatorTone(30, 600)).toBe("caution");
     expect(zoomIndicatorTone(11, 600)).toBe("caution");

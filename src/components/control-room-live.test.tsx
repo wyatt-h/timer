@@ -11,6 +11,34 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("live run-of-show drafts", () => {
+  it("uses neutral timer styling while more than 30 seconds remain", () => {
+    const event = makeEvent("Friday Night");
+    event.status = "live";
+
+    render(
+      <LiveConsole
+        event={event}
+        loginName="friday-night"
+        segments={flattenSegments(event)}
+        update={vi.fn()}
+        saveState="idle"
+        onRetrySave={vi.fn()}
+        onDiscardLocal={vi.fn(async () => ({ ok: true }))}
+        onKeepLocal={vi.fn(async () => ({ ok: true }))}
+        onFlushSaves={vi.fn()}
+        onDelete={vi.fn(async () => ({ ok: true }))}
+        onSignOut={vi.fn(async () => ({ ok: true }))}
+        conflictResolution={null}
+      />,
+    );
+
+    const clock = screen.getByText("10:00");
+    expect(clock).toHaveClass("text-ink");
+    expect(clock).not.toHaveClass("text-success");
+    expect(clock.parentElement).toHaveClass("bg-surface-sunken");
+    expect(clock.parentElement).not.toHaveClass("bg-success-soft");
+  });
+
   it("does not synchronize typing until Save changes is pressed", () => {
     const event = makeEvent("Friday Night");
     const future = makeAgendaItem("single");
@@ -44,14 +72,25 @@ describe("live run-of-show drafts", () => {
 
     expect(update).not.toHaveBeenCalled();
     expect(screen.getByText("Unsaved modifications")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Next part/i })).toBeDisabled();
+    const next = screen.getByRole("button", { name: /Next part/i });
+    expect(next).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("button", { name: "Undo Changes" })).toBeInTheDocument();
+
+    fireEvent.click(next);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "You have unresolved changes. Save or undo them before moving to another part.",
+    );
+    expect(update).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     expect(update).toHaveBeenCalledOnce();
     const updater = update.mock.calls[0][0];
     expect(updater(event).agenda[1].speakers[0].name).toBe("Updated speaker");
-    expect(screen.getByRole("button", { name: /Next part/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Next part/i })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("undoes a draft without synchronizing it and restores navigation", () => {
@@ -84,13 +123,75 @@ describe("live run-of-show drafts", () => {
     };
     name.value = "Discard this";
     fireEvent.input(name);
-    expect(screen.getByRole("button", { name: /Next part/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Next part/i })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Undo Changes" }));
 
     expect(update).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: /Next part/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Next part/i })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
     expect(screen.getByRole("button", { name: "No unsaved changes" })).toBeDisabled();
+  });
+
+  it("explains why previous, next-panelist, and panel-skip actions are blocked", () => {
+    const event = makeEvent("Friday Night");
+    event.agenda[0].speakers[0].name = "Opening";
+    const panel = makeAgendaItem("panel");
+    const closing = makeAgendaItem("single");
+    closing.speakers[0].name = "Closing";
+    event.agenda.push(panel, closing);
+    event.status = "live";
+    event.runtime = {
+      ...event.runtime,
+      status: "paused",
+      segmentIndex: 1,
+      remainingSeconds: panel.speakers[0].durationSeconds,
+      panelStatus: "ready",
+      panelRemainingSeconds: panel.durationSeconds,
+    };
+    const update = vi.fn<(updater: (current: TimerEvent) => TimerEvent) => void>();
+
+    render(
+      <LiveConsole
+        event={event}
+        loginName="friday-night"
+        segments={flattenSegments(event)}
+        update={update}
+        saveState="idle"
+        onRetrySave={vi.fn()}
+        onDiscardLocal={vi.fn(async () => ({ ok: true }))}
+        onKeepLocal={vi.fn(async () => ({ ok: true }))}
+        onFlushSaves={vi.fn()}
+        onDelete={vi.fn(async () => ({ ok: true }))}
+        onSignOut={vi.fn(async () => ({ ok: true }))}
+        conflictResolution={null}
+      />,
+    );
+
+    const name = screen.getByLabelText(/Name of the speaker in Closing/i) as HTMLElement & {
+      value: string;
+    };
+    name.value = "Updated closing";
+    fireEvent.input(name);
+
+    const actions = [
+      screen.getByRole("button", { name: /Previous/i }),
+      screen.getByRole("button", { name: /Next panelist/i }),
+      screen.getByRole("button", { name: /Skip the rest of the panel/i }),
+    ];
+    for (const action of actions) {
+      expect(action).toHaveAttribute("aria-disabled", "true");
+      fireEvent.click(action);
+      expect(screen.getByRole("alert")).toHaveTextContent("You have unresolved changes");
+    }
+
+    expect(update).not.toHaveBeenCalled();
+    expect(event.runtime.segmentIndex).toBe(1);
   });
 
   it("resets the current topic to its full duration and pauses it", () => {

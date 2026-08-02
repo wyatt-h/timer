@@ -189,7 +189,7 @@ describe("ZoomTimer inside a meeting", () => {
     });
     expect(options.timer.start).toBeGreaterThan(115_000);
     expect(options.timer.start).toBeLessThanOrEqual(120_000);
-    expect(options).toHaveProperty("borderColor", "#00D96F");
+    expect(options).toHaveProperty("borderColor", "#707070");
 
     expect(
       await screen.findByText("Everyone in this meeting can see this timer."),

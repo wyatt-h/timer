@@ -6,7 +6,7 @@ import {
 } from "@/lib/format";
 
 describe("shared timer colors", () => {
-  it("uses green above 30, yellow through 11, and red at 10 or below", () => {
+  it("uses neutral above 30, yellow through 11, and red at 10 or below", () => {
     expect(TIMER_CAUTION_SECONDS).toBe(30);
     expect(TIMER_CRITICAL_SECONDS).toBe(10);
     expect(timerTone(31)).toBe("normal");

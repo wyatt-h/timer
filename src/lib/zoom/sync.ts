@@ -33,7 +33,7 @@ const MINIMUM_PUBLISHABLE_SECONDS = 1;
 const MAX_LABEL_LENGTH = 30;
 
 export type TimerPhase = "idle" | "running" | "paused" | "finished";
-/** Zoom adds a filled overtime state beyond the three shared app colors. */
+/** Zoom adds a filled overtime state beyond the three shared app tones. */
 export type ZoomIndicatorTone = TimerTone | "overtime";
 
 /**
@@ -60,7 +60,7 @@ export type SourceTimer = {
   label: string;
   phase: TimerPhase;
   remainingSeconds: number;
-  /** Native-style green/yellow/red urgency for the compact contour. */
+  /** Neutral/yellow/red urgency for the compact contour. */
   tone: ZoomIndicatorTone;
   /** `RuntimeState.updatedAt`; advances on every control-room write. */
   revision: number;

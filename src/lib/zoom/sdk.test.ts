@@ -276,7 +276,7 @@ describe("commands", () => {
         countNegativeAfterAlarm: true,
         showNotification: false,
       },
-      borderColor: "#00D96F",
+      borderColor: "#707070",
       backgroundColor: "#242424",
       textColor: "#FFFFFF",
     });
@@ -316,7 +316,7 @@ describe("commands", () => {
       textColor: "#FFFFFF",
     });
     expect(sdk.setDynamicIndicatorStyle).toHaveBeenNthCalledWith(2, {
-      borderColor: "#00D96F",
+      borderColor: "#707070",
       backgroundColor: "#242424",
       textColor: "#FFFFFF",
     });

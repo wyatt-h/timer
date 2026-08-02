@@ -303,15 +303,16 @@ let queue: Promise<unknown> = Promise.resolve();
 let newestRevision = Number.NEGATIVE_INFINITY;
 
 /**
- * High-contrast contours model Zoom's native urgency states. Overtime is the
- * one filled state; every other entry sets the dark background explicitly so
- * extending an overtime timer restores the ordinary compact indicator.
+ * The ordinary indicator stays neutral; only the final 30 seconds introduce
+ * urgency colors. Overtime is the one filled state. Every other entry sets the
+ * dark background explicitly so extending an overtime timer restores the
+ * ordinary compact indicator.
  */
 export const ZOOM_INDICATOR_STYLES: Record<
   ZoomIndicatorTone,
   { borderColor: string; backgroundColor: string; textColor: string }
 > = {
-  normal: { borderColor: "#00D96F", backgroundColor: "#242424", textColor: "#FFFFFF" },
+  normal: { borderColor: "#707070", backgroundColor: "#242424", textColor: "#FFFFFF" },
   caution: { borderColor: "#FFB000", backgroundColor: "#242424", textColor: "#FFFFFF" },
   critical: { borderColor: "#F04464", backgroundColor: "#242424", textColor: "#FFFFFF" },
   overtime: { borderColor: "#F04464", backgroundColor: "#7A1C2D", textColor: "#FFFFFF" },

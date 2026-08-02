@@ -41,7 +41,7 @@ export const TimerProgress = memo(function TimerProgress({
       <i
         className={cn(
           "block h-full origin-left rounded-full transition-transform duration-200 ease-linear",
-          tone === "critical" ? "bg-over" : tone === "caution" ? "bg-caution" : "bg-success",
+          tone === "critical" ? "bg-over" : tone === "caution" ? "bg-caution" : "bg-ink/55",
         )}
         style={{ transform: `scaleX(${ratio})` }}
       />
