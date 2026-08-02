@@ -50,4 +50,46 @@ describe("live run-of-show drafts", () => {
     const updater = update.mock.calls[0][0];
     expect(updater(event).agenda[1].speakers[0].name).toBe("Updated speaker");
   });
+
+  it("resets the current topic to its full duration and pauses it", () => {
+    const event = makeEvent("Friday Night");
+    event.status = "live";
+    event.runtime = {
+      ...event.runtime,
+      status: "running",
+      remainingSeconds: 73,
+      endsAt: Date.now() + 73_000,
+    };
+    const update = vi.fn<(updater: (current: TimerEvent) => TimerEvent) => void>();
+
+    render(
+      <LiveConsole
+        event={event}
+        loginName="friday-night"
+        segments={flattenSegments(event)}
+        update={update}
+        saveState="idle"
+        onRetrySave={vi.fn()}
+        onDiscardLocal={vi.fn(async () => ({ ok: true }))}
+        onKeepLocal={vi.fn(async () => ({ ok: true }))}
+        onFlushSaves={vi.fn()}
+        onDelete={vi.fn(async () => ({ ok: true }))}
+        onSignOut={vi.fn(async () => ({ ok: true }))}
+        conflictResolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset current topic" }));
+
+    expect(update).toHaveBeenCalledOnce();
+    const reset = update.mock.calls[0][0](event);
+    expect(reset.runtime).toMatchObject({
+      status: "paused",
+      remainingSeconds: event.agenda[0].durationSeconds,
+      endsAt: null,
+      panelStatus: null,
+      panelRemainingSeconds: null,
+      panelEndsAt: null,
+    });
+  });
 });

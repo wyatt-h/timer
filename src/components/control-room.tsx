@@ -1305,32 +1305,31 @@ export function LiveConsole({
             </div>
           )}
 
-          <div className="grid auto-cols-fr grid-flow-col gap-1.5">
-            {!isPanel && (
-              <>
-                <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={() => adjust(-60)} title="Remove one minute">
-                  −1m
-                </button>
-                <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={() => adjust(-15)} title="Remove fifteen seconds">
-                  −15s
-                </button>
-              </>
-            )}
-            <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={resetCurrent} aria-label="Reset timer" title="Reset timer">
-              <RotateCcw size={13} />
-              {isPanel ? " Reset panel" : ""}
-            </button>
-            {!isPanel && (
-              <>
-                <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={() => adjust(15)} title="Add fifteen seconds">
-                  +15s
-                </button>
-                <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={() => adjust(60)} title="Add one minute">
-                  +1m
-                </button>
-              </>
-            )}
-          </div>
+          {!isPanel && (
+            <div className="grid grid-cols-4 gap-1.5">
+              <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={() => adjust(-60)} title="Remove one minute">
+                −1m
+              </button>
+              <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={() => adjust(-15)} title="Remove fifteen seconds">
+                −15s
+              </button>
+              <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={() => adjust(15)} title="Add fifteen seconds">
+                +15s
+              </button>
+              <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={() => adjust(60)} title="Add one minute">
+                +1m
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-control border border-line bg-white px-3 text-[12px] font-semibold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark"
+            onClick={resetCurrent}
+          >
+            <RotateCcw size={13} aria-hidden />
+            Reset current topic
+          </button>
 
           <div className="grid grid-cols-[1fr_auto] gap-x-2.5 gap-y-0.5 rounded-field border border-line bg-surface-raised px-3.5 py-3">
             <span className="text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
