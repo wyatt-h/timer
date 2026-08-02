@@ -500,6 +500,7 @@ export function LiveConsole({
    * stop just because the microphone changed hands.
    */
   function handleJumpTo(targetIndex: number) {
+    if (agendaDirty) return;
     const safeIndex = Math.max(0, Math.min(segments.length - 1, targetIndex));
     const target = segments[safeIndex];
     const targetItem = event.agenda.find((item) => item.id === target.agendaItemId);
@@ -687,18 +688,35 @@ export function LiveConsole({
           </span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {agendaDirty && (
-            <span className="text-[12px] font-semibold text-caution">Unsaved modifications</span>
+          {agendaDirty ? (
+            <>
+              <span className="text-[12px] font-semibold text-caution">Unsaved modifications</span>
+              <button
+                type="button"
+                className="inline-flex min-h-10 items-center rounded-control border border-line bg-white px-3.5 text-[12px] font-semibold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark"
+                onClick={useLatestAgenda}
+              >
+                Undo Changes
+              </button>
+              <button
+                type="button"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-control bg-violet px-3.5 text-[12px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark"
+                onClick={saveAgendaChanges}
+              >
+                <Check size={13} aria-hidden />
+                Save Changes
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="inline-flex min-h-10 cursor-default items-center gap-1.5 rounded-control bg-surface-sunken px-3.5 text-[12px] font-semibold text-text-subtle"
+              disabled
+            >
+              <Check size={13} aria-hidden />
+              No unsaved changes
+            </button>
           )}
-          <button
-            type="button"
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-control bg-violet px-3.5 text-[12px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark disabled:cursor-default disabled:bg-surface-sunken disabled:text-text-subtle"
-            disabled={!agendaDirty}
-            onClick={saveAgendaChanges}
-          >
-            <Check size={13} aria-hidden />
-            {agendaDirty ? "Save changes" : "No unsaved changes"}
-          </button>
         </div>
       </div>
 
@@ -1041,7 +1059,7 @@ export function LiveConsole({
 
                               <button
                                 className="inline-flex min-h-8 items-center rounded-control border border-line bg-white px-2.5 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover disabled:border-transparent disabled:bg-violet-soft disabled:text-violet-dark"
-                                disabled={speakerIsCurrent}
+                                disabled={speakerIsCurrent || agendaDirty}
                                 onClick={() => handleJumpTo(flatIndex)}
                               >
                                 {speakerIsCurrent ? "On now" : "Go to"}
@@ -1346,9 +1364,9 @@ export function LiveConsole({
           <div className="grid grid-cols-2 gap-2">
             <button
               className="flex min-h-12 min-w-0 items-center gap-2 rounded-field border border-line bg-white px-3 py-2 text-left text-text-muted transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-violet/30 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!previousPart}
+              disabled={!previousPart || agendaDirty}
               onClick={() => handleJumpTo(segmentIndex - 1)}
-              title="Previous part"
+              title={agendaDirty ? "Save or undo changes before moving" : "Previous part"}
             >
               <SkipBack size={14} />
               <span className="grid min-w-0 text-left">
@@ -1360,9 +1378,9 @@ export function LiveConsole({
             </button>
             <button
               className="flex min-h-12 min-w-0 items-center justify-end gap-2 rounded-field border border-transparent bg-violet px-3 py-2 text-right text-white transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-[0_10px_24px_rgba(103,69,220,0.28)] disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!nextPart}
+              disabled={!nextPart || agendaDirty}
               onClick={() => handleJumpTo(segmentIndex + 1)}
-              title="Next part"
+              title={agendaDirty ? "Save or undo changes before moving" : "Next part"}
             >
               <span className="grid min-w-0 text-right">
                 <small className="text-[12px] font-semibold text-white/70">
@@ -1379,9 +1397,10 @@ export function LiveConsole({
           {/* Only a panel has parts worth skipping past as a group. */}
           {isPanel && nextItemSegmentIndex >= 0 && (
             <button
-              className="flex min-h-11 w-full items-center gap-2 rounded-field border border-violet/22 bg-surface-hover px-3 py-2 text-left text-violet-dark transition-[border-color,box-shadow] duration-150 hover:border-violet/40"
+              className="flex min-h-11 w-full items-center gap-2 rounded-field border border-violet/22 bg-surface-hover px-3 py-2 text-left text-violet-dark transition-[border-color,box-shadow] duration-150 hover:border-violet/40 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={agendaDirty}
               onClick={() => handleJumpTo(nextItemSegmentIndex)}
-              title="Skip the rest of this panel"
+              title={agendaDirty ? "Save or undo changes before moving" : "Skip the rest of this panel"}
             >
               <FastForward size={14} />
               <span className="grid min-w-0 text-left">

@@ -310,9 +310,13 @@ export function AudienceDisplay() {
               Sound on
             </button>
           ) : (
-            <button className="inline-flex min-h-[38px] items-center gap-2 rounded-field border border-[#9b83f5]/50 bg-violet/20 px-3 text-[12px] font-semibold text-[#cdc2ff] transition-colors duration-150 hover:bg-violet/32 hover:text-white" onClick={() => void unlock()} aria-pressed="false">
+            <button
+              className="inline-flex min-h-[38px] items-center gap-2 rounded-field border border-[#9b83f5]/50 bg-violet/20 px-3 text-[12px] font-semibold text-[#cdc2ff] transition-colors duration-150 hover:bg-violet/32 hover:text-white"
+              onClick={() => void previewChime(chimePreset)}
+              aria-pressed="false"
+            >
               <VolumeX size={14} />
-              Tap to enable sound
+              Enable &amp; test sound
             </button>
           )}
           <div className="relative" ref={soundPicker}>

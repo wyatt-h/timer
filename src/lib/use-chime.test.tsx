@@ -79,6 +79,19 @@ describe("useChime", () => {
     expect(result.current.isReady).toBe(true);
   });
 
+  it("can enable audio and preview a sound in the same first click", async () => {
+    const { result } = renderHook(() => useChime());
+
+    await act(async () => {
+      expect(await result.current.play("warm")).toBe(true);
+    });
+
+    expect(result.current.isReady).toBe(true);
+    expect(FakeAudioContext.instances).toHaveLength(1);
+    expect(FakeAudioContext.instances[0].resume).toHaveBeenCalledOnce();
+    expect(FakeAudioContext.instances[0].oscillators).toHaveLength(2);
+  });
+
   it("resumes an idle context and schedules one soft 1.5-second bell", async () => {
     const { result } = renderHook(() => useChime());
     await act(async () => {

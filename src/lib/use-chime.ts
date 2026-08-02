@@ -151,15 +151,30 @@ export function useChime() {
     [],
   );
 
-  const unlock = useCallback(async () => {
+  const ensureRunning = useCallback(async () => {
     context.current ??= createContext();
     const audio = context.current;
-    if (!audio) return false;
-    if (audio.state === "suspended") await audio.resume();
+    if (!audio) {
+      setIsReady(false);
+      return null;
+    }
+    if (audio.state === "suspended") {
+      try {
+        await audio.resume();
+      } catch {
+        setIsReady(false);
+        return null;
+      }
+    }
     const ready = audio.state === "running";
     setIsReady(ready);
-    return ready;
+    return ready ? audio : null;
   }, []);
+
+  const unlock = useCallback(
+    async () => Boolean(await ensureRunning()),
+    [ensureRunning],
+  );
 
   const disable = useCallback(async () => {
     const audio = context.current;
@@ -168,20 +183,13 @@ export function useChime() {
   }, []);
 
   const play = useCallback(async (preset: ChimePreset = "feather") => {
-    const audio = context.current;
-    if (!audio) return false;
     /*
      * Browsers may suspend an unlocked context while a display sits idle.
-     * Resuming it here keeps a long talk from silently losing its end alarm.
+     * Creating/resuming it here also lets a preset preview be the first user
+     * gesture that enables audio instead of requiring a separate silent tap.
      */
-    if (audio.state === "suspended") {
-      try {
-        await audio.resume();
-      } catch {
-        return false;
-      }
-    }
-    if (audio.state !== "running") return false;
+    const audio = await ensureRunning();
+    if (!audio) return false;
 
     const start = audio.currentTime;
     for (const tone of CHIME_TONES[preset]) {
@@ -207,7 +215,7 @@ export function useChime() {
     }
 
     return true;
-  }, []);
+  }, [ensureRunning]);
 
   return { play, unlock, disable, isReady };
 }

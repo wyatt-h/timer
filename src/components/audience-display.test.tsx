@@ -7,6 +7,7 @@ const audienceTestState = vi.hoisted(() => ({
   play: vi.fn(),
   unlock: vi.fn(),
   disable: vi.fn(),
+  isReady: true,
   remoteSoundEnabled: true,
   remoteSpeakerMuted: false,
 }));
@@ -64,7 +65,7 @@ vi.mock("@/lib/use-chime", async (importOriginal) => {
       play: audienceTestState.play,
       unlock: audienceTestState.unlock,
       disable: audienceTestState.disable,
-      isReady: true,
+      isReady: audienceTestState.isReady,
     }),
   };
 });
@@ -78,6 +79,9 @@ describe("AudienceDisplay", () => {
     audienceTestState.timerFinished = false;
     audienceTestState.remoteSoundEnabled = true;
     audienceTestState.remoteSpeakerMuted = false;
+    audienceTestState.isReady = true;
+    audienceTestState.play.mockResolvedValue(true);
+    audienceTestState.unlock.mockResolvedValue(true);
     window.localStorage.clear();
     vi.clearAllMocks();
   });
@@ -96,6 +100,20 @@ describe("AudienceDisplay", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Sound on" }));
     expect(audienceTestState.disable).toHaveBeenCalledOnce();
+  });
+
+  it("enables audio and plays the selected sound as audible confirmation", async () => {
+    audienceTestState.isReady = false;
+    render(<AudienceDisplay />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enable & test sound" }),
+    );
+
+    await waitFor(() => {
+      expect(audienceTestState.unlock).toHaveBeenCalledOnce();
+      expect(audienceTestState.play).toHaveBeenCalledWith("feather");
+    });
   });
 
   it("plays the alarm when a running speaker crosses zero", async () => {
