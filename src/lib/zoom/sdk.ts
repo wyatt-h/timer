@@ -1,5 +1,5 @@
 import type { ZoomIndicatorTone, ZoomTimerCommand } from "@/lib/zoom/sync";
-import { toZoomTimerUnits } from "@/lib/zoom/sync";
+import { toZoomDurationUnits, toZoomTimerUnits } from "@/lib/zoom/sync";
 
 /*
  * Every direct conversation with the Zoom Apps SDK happens here: one
@@ -349,7 +349,7 @@ async function send(instance: ZoomSdk, command: ZoomTimerCommand) {
       return;
     case "extend":
       await instance.extendDynamicIndicator({
-        extendDuration: toZoomTimerUnits(command.seconds),
+        extendDuration: toZoomDurationUnits(command.seconds),
       });
       return;
     case "style":

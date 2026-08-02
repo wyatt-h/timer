@@ -3,6 +3,7 @@ import {
   DRIFT_TOLERANCE_SECONDS,
   planZoomCommand,
   sourceTimerFromEvent,
+  toZoomDurationUnits,
   toZoomTimerUnits,
   zoomIndicatorTone,
   type PublishedTimer,
@@ -157,11 +158,18 @@ describe("remaining seconds from authoritative state", () => {
     expect(sourceTimerFromEvent(event, NOW)?.phase).toBe("finished");
   });
 
-  it("rounds like the web display and clamps at the Zoom boundary", () => {
-    expect(toZoomTimerUnits(299.2)).toBe(300_000);
-    expect(toZoomTimerUnits(10.01)).toBe(11_000);
-    expect(toZoomTimerUnits(10)).toBe(10_000);
+  it("preserves the tick boundary while matching the web display", () => {
+    expect(toZoomTimerUnits(299.2)).toBe(300_199);
+    expect(toZoomTimerUnits(10.01)).toBe(11_009);
+    expect(toZoomTimerUnits(10)).toBe(10_999);
+    expect(toZoomTimerUnits(-0.5)).toBe(0);
     expect(toZoomTimerUnits(-12)).toBe(0);
+  });
+
+  it("converts extensions without adding the display offset", () => {
+    expect(toZoomDurationUnits(15)).toBe(15_000);
+    expect(toZoomDurationUnits(1.234)).toBe(1_234);
+    expect(toZoomDurationUnits(-12)).toBe(0);
   });
 });
 

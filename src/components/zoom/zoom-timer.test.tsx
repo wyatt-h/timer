@@ -188,7 +188,7 @@ describe("ZoomTimer inside a meeting", () => {
       withSound: false,
     });
     expect(options.timer.start).toBeGreaterThan(115_000);
-    expect(options.timer.start).toBeLessThanOrEqual(120_000);
+    expect(options.timer.start).toBeLessThanOrEqual(121_000);
     expect(options).toHaveProperty("borderColor", "#707070");
 
     expect(

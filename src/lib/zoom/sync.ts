@@ -94,11 +94,20 @@ export type ZoomTimerPlan = {
 };
 
 /**
- * Dynamic Indicator timer values are milliseconds. Keeping that conversion at
- * the SDK boundary lets the rest of the application continue to use seconds.
+ * Zoom renders a fractional countdown by dropping the partial second while the
+ * web clock uses `Math.ceil`. Preserve the source clock's sub-second position
+ * and add 999 ms so both displays change digits at the same instant. Rounding
+ * the source to a whole second here would restart Zoom's second boundary and
+ * leave its indicator one count behind the website for most of the next tick.
  */
 export function toZoomTimerUnits(seconds: number) {
-  return Math.max(0, Math.ceil(seconds) * 1000);
+  if (seconds <= 0) return 0;
+  return Math.ceil(seconds * 1000) + 999;
+}
+
+/** Extensions are durations, so they must not receive the display offset. */
+export function toZoomDurationUnits(seconds: number) {
+  return Math.max(0, Math.ceil(seconds * 1000));
 }
 
 function shortLabel(label: string) {
