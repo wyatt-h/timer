@@ -13,8 +13,8 @@ import type { AgendaFormValues, AgendaItemValues } from "@/lib/agenda-schema";
  * Converting in one place keeps the two from leaking into each other.
  */
 
-const toMinutes = (seconds: number) => Math.max(1, Math.round(seconds / 60));
-const toSeconds = (minutes: number) => Math.max(1, Math.round(minutes)) * 60;
+const toMinutes = (seconds: number) => Math.max(1, seconds / 60);
+const toSeconds = (minutes: number) => Math.max(1, Math.round(minutes * 60));
 
 function newId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto

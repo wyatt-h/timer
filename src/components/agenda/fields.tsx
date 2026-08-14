@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Input, type InputProps } from "@/components/ui/input";
 
 /**
- * Whole-minute input.
+ * Minute input that also accepts decimals for partial minutes.
  *
  * Kept as a string while focused so a half-typed value like "1" on the way to
  * "15" isn't clamped out from under the cursor, then committed as a number on
@@ -30,9 +30,9 @@ export function DurationField({
     <Input
       {...props}
       type="number"
-      inputMode="numeric"
+      inputMode="decimal"
       min="1"
-      step="1"
+      step="any"
       aria-invalid={invalid || undefined}
       className={cn("material-outlined-field--minutes tabular", className)}
       value={draft ?? String(Number.isFinite(value) ? value : "")}
@@ -47,7 +47,7 @@ export function DurationField({
       }}
       onBlur={() => {
         const parsed = Number(draft);
-        onChange(draft?.trim() && Number.isFinite(parsed) ? Math.round(parsed) : value);
+        onChange(draft?.trim() && Number.isFinite(parsed) ? parsed : value);
         setDraft(null);
         onBlur?.();
       }}

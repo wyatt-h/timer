@@ -85,12 +85,18 @@ describe("validation", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects fractional and non-positive durations", () => {
-    for (const minutes of [0, -5, 2.5]) {
+  it("rejects non-positive durations", () => {
+    for (const minutes of [0, -5]) {
       const speaker = makeSpeakerItem(minutes);
       if (speaker.type === "speaker") speaker.speaker.name = "Someone";
       expect(agendaFormSchema.safeParse({ agendaItems: [speaker] }).success).toBe(false);
     }
+  });
+
+  it("accepts fractional durations", () => {
+    const speaker = makeSpeakerItem(2.5);
+    if (speaker.type === "speaker") speaker.speaker.name = "Someone";
+    expect(agendaFormSchema.safeParse({ agendaItems: [speaker] }).success).toBe(true);
   });
 
   it("flags a panel whose panelists exceed the panel duration", () => {
@@ -215,6 +221,21 @@ describe("domain mapping", () => {
     const back = toAgendaItems(values, stored);
     expect(back[0].durationSeconds).toBe(900);
     expect(back[0].speakers[0].durationSeconds).toBe(900);
+  });
+
+  it("converts fractional minutes to seconds without rounding to a whole minute", () => {
+    const values = toFormValues(stored);
+    values.agendaItems[0].durationMinutes = 2.5;
+    const back = toAgendaItems(values, stored);
+    expect(back[0].durationSeconds).toBe(150);
+    expect(back[0].speakers[0].durationSeconds).toBe(150);
+  });
+
+  it("preserves partial minutes when loading stored seconds", () => {
+    const fractional = structuredClone(stored);
+    fractional[0].durationSeconds = 150;
+    fractional[0].speakers[0].durationSeconds = 150;
+    expect(toFormValues(fractional).agendaItems[0].durationMinutes).toBe(2.5);
   });
 });
 

@@ -1,14 +1,13 @@
 import { z } from "zod";
 
 /*
- * The editor works in whole minutes because that is how a run of show is
- * planned and spoken about. The persisted domain model stores seconds, so the
+ * The editor works in minutes, including decimal values for partial minutes.
+ * The persisted domain model stores seconds, so the
  * mappers in `agenda-mapping.ts` convert at the boundary rather than letting
  * two units mix inside the form.
  */
 const minutes = z
   .number({ message: "Enter a number of minutes" })
-  .int("Use whole minutes")
   .positive("Must be at least 1 minute")
   .max(1440, "That is longer than a day");
 
