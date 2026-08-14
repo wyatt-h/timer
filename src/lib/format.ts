@@ -54,12 +54,17 @@ export function elapsedRatio(remainingSeconds: number, durationSeconds: number) 
   return Math.min(1, Math.max(0, 1 - remainingSeconds / durationSeconds));
 }
 
+/** Minute value for compact labels and inputs, precise to the stored second. */
+export function minutesFromSeconds(totalSeconds: number) {
+  return Number((totalSeconds / 60).toFixed(2));
+}
+
 export function formatDuration(totalSeconds: number) {
-  const minutes = Math.round(totalSeconds / 60);
-  if (minutes < 60) return `${minutes} min`;
+  const minutes = totalSeconds / 60;
+  if (minutes < 60) return `${minutesFromSeconds(totalSeconds)} min`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest ? `${hours} hr ${rest} min` : `${hours} hr`;
+  return rest ? `${hours} hr ${Number(rest.toFixed(2))} min` : `${hours} hr`;
 }
 
 export function formatClockTime(timestamp: number) {

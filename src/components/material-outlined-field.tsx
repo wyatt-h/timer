@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { minutesFromSeconds } from "@/lib/format";
 import type {
   TextFieldType,
 } from "@material/web/textfield/outlined-text-field.js";
@@ -229,7 +230,7 @@ function minutesValue(
   return String(
     Math.max(
       minimumMinutes,
-      Math.round((seconds ?? fallbackMinutes * 60) / 60),
+      minutesFromSeconds(seconds ?? fallbackMinutes * 60),
     ),
   );
 }
@@ -266,7 +267,7 @@ export function MaterialOutlinedDurationField({
       type="number"
       inputMode="decimal"
       min={String(minimumMinutes)}
-      step="1"
+      step="any"
       noSpinner
       suffixText="min"
       ariaLabel={ariaLabel}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import { minutesFromSeconds } from "@/lib/format";
 
 type DurationInputProps = {
   seconds: number | undefined;
@@ -14,7 +15,7 @@ type DurationInputProps = {
 };
 
 function toMinutes(seconds: number | undefined, minimumMinutes: number, fallbackMinutes: number) {
-  return String(Math.max(minimumMinutes, Math.round((seconds ?? fallbackMinutes * 60) / 60)));
+  return String(Math.max(minimumMinutes, minutesFromSeconds(seconds ?? fallbackMinutes * 60)));
 }
 
 export function DurationInput({
@@ -36,7 +37,10 @@ export function DurationInput({
     const minutes =
       rawValue.trim() && Number.isFinite(parsed)
         ? Math.max(minimumMinutes, parsed)
-        : Math.max(minimumMinutes, Math.round((seconds ?? fallbackMinutes * 60) / 60));
+        : Math.max(
+            minimumMinutes,
+            minutesFromSeconds(seconds ?? fallbackMinutes * 60),
+          );
     setValue(String(minutes));
     onSecondsChange(Math.round(minutes * 60));
   }
@@ -48,7 +52,7 @@ export function DurationInput({
       aria-label={ariaLabel}
       inputMode="decimal"
       min={String(minimumMinutes)}
-      step="1"
+      step="any"
       type="number"
       noSpinner
       suffixText="min"

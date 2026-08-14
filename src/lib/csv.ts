@@ -84,13 +84,15 @@ export function parseEventCsv(source: string): TimerEvent[] {
             ? itemRows.map((record, index) => ({
                 id: crypto.randomUUID(),
                 name: record.speaker_name || `Panelist ${index + 1}`,
-                durationSeconds: positiveNumber(record.speaker_minutes, defaultMinutes) * 60,
+                durationSeconds: Math.round(
+                  positiveNumber(record.speaker_minutes, defaultMinutes) * 60,
+                ),
               }))
             : [
                 {
                   id: crypto.randomUUID(),
                   name: first.speaker_name || "",
-                  durationSeconds: positiveNumber(first.duration_minutes, 10) * 60,
+                  durationSeconds: Math.round(positiveNumber(first.duration_minutes, 10) * 60),
                 },
               ];
         return {
@@ -99,12 +101,14 @@ export function parseEventCsv(source: string): TimerEvent[] {
           host: kind === "panel" ? first.panel_host || undefined : undefined,
           durationSeconds:
             kind === "panel"
-              ? positiveNumber(
-                  first.panel_total_minutes,
-                  speakers.reduce((sum, speaker) => sum + speaker.durationSeconds, 0) / 60,
-                ) * 60
-              : positiveNumber(first.duration_minutes, 10) * 60,
-          speakerDefaultSeconds: kind === "panel" ? defaultMinutes * 60 : undefined,
+              ? Math.round(
+                  positiveNumber(
+                    first.panel_total_minutes,
+                    speakers.reduce((sum, speaker) => sum + speaker.durationSeconds, 0) / 60,
+                  ) * 60,
+                )
+              : Math.round(positiveNumber(first.duration_minutes, 10) * 60),
+          speakerDefaultSeconds: kind === "panel" ? Math.round(defaultMinutes * 60) : undefined,
           speakers,
         };
       });

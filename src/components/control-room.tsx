@@ -46,6 +46,7 @@ import {
   formatDuration,
   formatTimer,
   itemLabel,
+  minutesFromSeconds,
   panelLabel,
   timerTone,
 } from "@/lib/format";
@@ -119,7 +120,7 @@ function DurationReadout({
       aria-label={label}
       className="tabular inline-flex h-12 w-[118px] shrink-0 items-center justify-between rounded-field border border-line-soft bg-surface-sunken px-3 text-[13px] text-ink"
     >
-      <span>{Math.round(seconds / 60)}</span>
+      <span>{minutesFromSeconds(seconds)}</span>
       <span className="text-[12px] text-text-subtle">min</span>
     </span>
   );
@@ -1131,9 +1132,7 @@ export function LiveConsole({
                               {timingLocked ? (
                                 <DurationReadout
                                   seconds={speaker.durationSeconds}
-                                  label={`${Math.round(
-                                    speaker.durationSeconds / 60,
-                                  )} minutes for ${speaker.name}`}
+                                  label={`${minutesFromSeconds(speaker.durationSeconds)} minutes for ${speaker.name}`}
                                 />
                               ) : (
                                 <DurationInput

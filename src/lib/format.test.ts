@@ -2,8 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   TIMER_CAUTION_SECONDS,
   TIMER_CRITICAL_SECONDS,
+  formatDuration,
   timerTone,
 } from "@/lib/format";
+
+describe("duration formatting", () => {
+  it("shows fractional minutes without rounding them to a whole minute", () => {
+    expect(formatDuration(150)).toBe("2.5 min");
+    expect(formatDuration(3750)).toBe("1 hr 2.5 min");
+  });
+
+  it("keeps whole-minute durations concise", () => {
+    expect(formatDuration(600)).toBe("10 min");
+    expect(formatDuration(3600)).toBe("1 hr");
+  });
+});
 
 describe("shared timer colors", () => {
   it("uses neutral above 30, yellow through 11, and red at 10 or below", () => {
