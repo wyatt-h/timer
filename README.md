@@ -229,6 +229,13 @@ than a speaker label. Every participant sees it without installing anything. Onl
 the operator installs the app. The application and its Supabase data remain
 authoritative; the Zoom page never writes to them.
 
+For production installation, set the Zoom Marketplace OAuth Redirect URL to
+`https://timer-beryl-psi.vercel.app/api/zoom/callback` and configure
+`ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, and `ZOOM_REDIRECT_URI` in Vercel using
+the app's production credentials. The callback exchanges Zoom's one-time code,
+does not retain the resulting tokens because this app does not call Zoom REST
+APIs, and redirects the installer to `/zoom`.
+
 ### Connect an event
 
 1. Open the event's control room and press **Create Zoom code**, then copy the code.
