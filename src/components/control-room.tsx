@@ -451,7 +451,7 @@ export function LiveConsole({
   const remainingProgramSeconds =
     displaySeconds +
     segments.slice(segmentIndex + 1).reduce((sum, segment) => sum + segment.durationSeconds, 0);
-  const hostTransitionSeconds = event.hostTransitionSeconds ?? 0;
+  const hostTransitionSeconds = event.hostTransitionSeconds ?? 60;
   const upcomingTransitionCount = Math.max(0, event.agenda.length - currentAgendaIndex - 1);
   const transitionAllowanceSeconds = remainingHostTransitionSeconds(
     event.agenda,

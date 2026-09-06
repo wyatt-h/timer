@@ -82,7 +82,7 @@ export function makeEvent(name = "Untitled event"): TimerEvent {
     date: new Date().toISOString().slice(0, 10),
     status: "draft",
     viewerToken: makeId(),
-    hostTransitionSeconds: 0,
+    hostTransitionSeconds: 60,
     agenda: [first],
     runtime: {
       status: "ready",

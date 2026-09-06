@@ -2,7 +2,7 @@
  * Timer database validator
  *
  * Run this entire file in Supabase Dashboard -> SQL Editor after applying
- * 20260906000000_add_host_transition_timing.sql.
+ * 20260906010000_default_host_transition_one_minute.sql.
  *
  * READ-ONLY: this script creates, changes, and deletes nothing. It returns one
  * result table. The SUMMARY row must be PASS and every other row should be PASS.
@@ -252,10 +252,10 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     exists (
       select 1
       from supabase_migrations.schema_migrations
-      where version = '20260906000000'
+      where version = '20260906010000'
     ),
     'FAIL',
-    'Expected version 20260906000000 in supabase_migrations.schema_migrations'
+    'Expected version 20260906010000 in supabase_migrations.schema_migrations'
 
   union all
   select

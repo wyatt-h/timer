@@ -110,7 +110,7 @@ export function toDatabaseEvent(event: EventPayload) {
     date: event.date,
     status: event.status,
     viewerToken: event.viewerToken,
-    hostTransitionSeconds: event.hostTransitionSeconds ?? 0,
+    hostTransitionSeconds: event.hostTransitionSeconds ?? 60,
     zoomToken: event.zoomToken ?? null,
     agenda: event.agenda.map((item) => ({
       id: item.id,
@@ -151,7 +151,7 @@ export function toTimerEvent(event: EventPayload): TimerEvent {
     date: event.date,
     status: event.status,
     viewerToken: event.viewerToken,
-    hostTransitionSeconds: event.hostTransitionSeconds ?? 0,
+    hostTransitionSeconds: event.hostTransitionSeconds ?? 60,
     zoomToken: event.zoomToken ?? undefined,
     agenda: event.agenda.map((item) => ({
       id: item.id,

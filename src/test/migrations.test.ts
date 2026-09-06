@@ -40,6 +40,8 @@ const LOGIN_NAME_MIGRATION = "20260801020000_separate_event_login_name.sql";
 const REUSABLE_INVITE_MIGRATION = "20260801030000_reusable_event_invites.sql";
 const LOGIN_NAME_SLUG_MIGRATION = "20260801040000_slug_event_login_names.sql";
 const HOST_TRANSITION_MIGRATION = "20260906000000_add_host_transition_timing.sql";
+const HOST_TRANSITION_DEFAULT_MIGRATION =
+  "20260906010000_default_host_transition_one_minute.sql";
 const VALIDATOR = fileURLToPath(
   new URL("../../supabase/validate_event_controller_database.sql", import.meta.url),
 );
@@ -50,7 +52,7 @@ describe("the complete migration history", () => {
     // first failure, so reaching this point is the assertion. Named explicitly
     // because it is the check that guards against an unrunnable migration.
     const files = migrationFiles();
-    expect(files.at(-1)).toBe(HOST_TRANSITION_MIGRATION);
+    expect(files.at(-1)).toBe(HOST_TRANSITION_DEFAULT_MIGRATION);
     expect(files).toEqual([...files].sort());
 
     const tables = await rows<{ table_name: string }>(
@@ -87,7 +89,7 @@ describe("the complete migration history", () => {
       create schema if not exists supabase_migrations;
       create table if not exists supabase_migrations.schema_migrations (version text primary key);
       insert into supabase_migrations.schema_migrations (version)
-      values ('20260906000000') on conflict do nothing;
+      values ('20260906010000') on conflict do nothing;
     `);
     const report = await rows<{ area: string; status: string; details: string }>(
       db,
@@ -354,6 +356,7 @@ describe("existing-row safety", () => {
       REUSABLE_INVITE_MIGRATION,
       LOGIN_NAME_SLUG_MIGRATION,
       HOST_TRANSITION_MIGRATION,
+      HOST_TRANSITION_DEFAULT_MIGRATION,
     ].includes(name))) {
       await legacy.exec(readMigration(file));
     }
@@ -408,6 +411,7 @@ describe("existing-row safety", () => {
       REUSABLE_INVITE_MIGRATION,
       LOGIN_NAME_SLUG_MIGRATION,
       HOST_TRANSITION_MIGRATION,
+      HOST_TRANSITION_DEFAULT_MIGRATION,
     ].includes(name))) {
       await legacy.exec(readMigration(file));
     }
@@ -616,6 +620,26 @@ describe("controller event functions", () => {
       [document.id],
     );
     expect(stored?.host_transition_seconds).toBe(90);
+  });
+
+  it("defaults an omitted host transition to one minute", async () => {
+    const document = await eventDocument({ name: "summit-default-transition" });
+    const { hostTransitionSeconds: _omitted, ...olderDocument } = document;
+    expect(_omitted).toBe(0);
+    const result = await one<{ result: Record<string, unknown> }>(
+      db,
+      `select public.create_controller_event($1::jsonb, $2, $3, $4, $5) as result`,
+      [
+        JSON.stringify(olderDocument),
+        "summit-default-transition",
+        "scrypt$fake-password-hash",
+        (await newUuid(db)).replace(/-/g, "").padEnd(64, "0"),
+        3600,
+      ],
+    );
+
+    const payload = result?.result.payload as Record<string, Record<string, unknown>>;
+    expect(payload.event.hostTransitionSeconds).toBe(60);
   });
 
   it("stores negative remaining seconds so overtime survives a save", async () => {
