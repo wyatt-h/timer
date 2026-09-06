@@ -5,6 +5,7 @@ import { createMigratedDatabase, one, rows, type TestDatabase } from "@/test/pg"
 import { createPgSupabaseClient } from "@/test/pg-supabase";
 import { suggestLoginName } from "@/lib/event-auth/login-name";
 import type { TimerEvent } from "@/lib/types";
+import { isZoomToken } from "@/lib/zoom/token";
 
 let db: TestDatabase;
 let client: SupabaseClient | null = null;
@@ -170,6 +171,22 @@ describe("event creation", () => {
     expect(cookie?.httpOnly).toBe(true);
     expect(cookie?.sameSite).toBe("lax");
     expect(cookie?.maxAge).toBe(SESSION_TTL_SECONDS);
+  });
+
+  it("automatically creates and stores a Zoom code with every new event", async () => {
+    const { response, body, event } = await createEvent("Zoom-ready summit");
+
+    expect(response.status).toBe(201);
+    const created = body.event as TimerEvent;
+    expect(created.zoomToken).toBeDefined();
+    expect(isZoomToken(created.zoomToken ?? "")).toBe(true);
+
+    const stored = await one<{ zoom_token: string }>(
+      db,
+      `select zoom_token from public.events where id = $1`,
+      [event.id],
+    );
+    expect(stored?.zoom_token).toBe(created.zoomToken);
   });
 
   it("requires only a six-character password", async () => {

@@ -765,8 +765,8 @@ export function LiveConsole({
   /*
    * The Zoom App runs in a webview that does not necessarily carry this
    * browser's session, so an event is paired by a short code rather than by
-   * signing in again. It is minted on demand: an event that never goes near
-   * Zoom never gets one.
+   * signing in again. New events receive one at creation; this fallback mints a
+   * code only for an older event that predates automatic Zoom codes.
    */
   function createZoomCode() {
     mutateEvent((currentEvent) => ({

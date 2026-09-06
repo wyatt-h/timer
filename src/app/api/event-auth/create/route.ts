@@ -8,6 +8,7 @@ import { hashSecret } from "@/lib/server/password";
 import { enforceRateLimit } from "@/lib/server/rate-limit";
 import { apiError, apiFailure, apiSuccess, readJsonBody } from "@/lib/server/respond";
 import { SESSION_TTL_SECONDS, prepareEventSession } from "@/lib/server/session";
+import { makeZoomToken } from "@/lib/zoom/token";
 
 /*
  * Creates an independent event and the controller credentials that own it.
@@ -49,9 +50,15 @@ export async function POST(request: Request) {
      * token ever being stored.
      */
     const session = prepareEventSession(parsed.data.event.id);
+    const event = {
+      ...parsed.data.event,
+      // Mint on the trusted create path so every new event is immediately ready
+      // to pair with Zoom, even if an older client did not send a code.
+      zoomToken: parsed.data.event.zoomToken ?? makeZoomToken(),
+    };
 
     const result = await createControllerEvent({
-      event: toDatabaseEvent(parsed.data.event),
+      event: toDatabaseEvent(event),
       loginName,
       passwordHash,
       sessionTokenHash: session.tokenHash,
