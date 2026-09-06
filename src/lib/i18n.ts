@@ -44,16 +44,16 @@ const zh = {
   "One clock. Every room.": "一个时钟，同步每个空间。",
   "One clock.": "一个时钟。",
   "Every room.": "同步每个空间。",
-  "Build the run of show, control every transition, and keep the audience and Zoom meeting perfectly in step.":
-    "编排活动流程、掌控每次转场，让现场观众和 Zoom 会议始终同步。",
+  "Build the run of show, control every transition, and keep the speaker view and Zoom meeting perfectly in step.":
+    "编排活动流程、掌控每次转场，让演讲者视图和 Zoom 会议始终同步。",
   "Start the tour": "开始导览",
   "Open Timer": "打开 Timer",
   "No user account": "无需用户账户",
   "Per-event access": "每个活动独立访问",
-  "Audience stays read-only": "观众始终只读",
+  "Speaker view stays read-only": "演讲者视图始终只读",
   "For the operator": "面向操作员",
   "A focused live control room": "专注的实时控制室",
-  "For the audience": "面向观众",
+  "For the speaker": "面向演讲者",
   "A fullscreen synchronized clock": "全屏同步时钟",
   "For the meeting": "面向会议",
   "A native Zoom indicator": "原生 Zoom 指示器",
@@ -72,21 +72,21 @@ const zh = {
     "在一个清晰的控制室中开始、暂停、重置、跳过或调整时间；预计结束时间会随流程变化自动更新。",
   Share: "分享",
   "Put the same clock everywhere it matters.": "让同一个时钟出现在每个需要它的地方。",
-  "Open the fullscreen audience display, invite another controller, or publish the countdown in a Zoom meeting.":
-    "打开全屏观众视图、邀请另一位操作员，或在 Zoom 会议中发布倒计时。",
+  "Open the fullscreen speaker view, invite another controller, or publish the countdown in a Zoom meeting.":
+    "打开全屏演讲者视图、邀请另一位操作员，或在 Zoom 会议中发布倒计时。",
   "Three experiences": "三种使用体验",
   "Everyone sees exactly what they need.": "每个人都能看到恰好需要的信息。",
-  "The controller can change the event. The audience receives a clean read-only display. Zoom participants see the shared countdown without opening another window.":
-    "操作员可以修改活动；观众看到简洁的只读画面；Zoom 参会者无需打开其他窗口即可看到共享倒计时。",
+  "The controller can change the event. The speaker receives a clean read-only countdown. Zoom participants see the shared countdown without opening another window.":
+    "操作员可以修改活动；演讲者看到简洁的只读倒计时；Zoom 参会者无需打开其他窗口即可看到共享倒计时。",
   "Event controller": "活动控制台",
   "Run the clock, edit what is coming next, share access, and watch every save reach the cloud.":
     "控制计时、编辑后续流程、共享访问权限，并确认每次保存都已同步到云端。",
   "Start · pause · reset": "开始 · 暂停 · 重置",
   "Draft and save": "草稿与保存",
   "Projected finish": "预计结束时间",
-  "Audience display": "观众视图",
-  "A high-contrast fullscreen countdown with local alarm choice and a clear overtime state.":
-    "高对比度全屏倒计时，可在本地选择提示音，并清楚显示超时状态。",
+  "Speaker view": "演讲者视图",
+  "A high-contrast fullscreen countdown showing exactly how much time the speaker has left, with a local alarm choice and clear overtime state.":
+    "高对比度全屏倒计时，让演讲者清楚看到剩余时间，并可在本地选择提示音和查看超时状态。",
   "Anonymous link": "匿名链接",
   "Read-only": "只读",
   "Local sound": "本地声音",
@@ -128,7 +128,7 @@ const zh = {
   "An event is its own secure workspace.": "每个活动都是独立安全的工作空间。",
   "There are no teams or user directories to manage. Each event has its own login and password, while temporary invitation links make it easy to bring another controller into the room.":
     "无需管理团队或用户目录。每个活动都有独立的登录名和密码，临时邀请链接则能方便地让另一位操作员加入。",
-  "Audience links can never edit": "观众链接无法编辑",
+  "Speaker links can never edit": "演讲者链接无法编辑",
   "Invitations expire after 24 hours": "邀请在 24 小时后过期",
   "Sessions are remembered per device": "每台设备会记住会话",
   "Invitation access can be revoked": "邀请权限可随时撤销",
@@ -138,9 +138,9 @@ const zh = {
   Revoke: "撤销",
   "Good to know": "常见须知",
   "A few common questions.": "一些常见问题。",
-  "Does the audience need an account?": "观众需要账户吗？",
-  "No. The audience link is anonymous and read-only. Anyone with the link can open the synchronized display, but they cannot change the event.":
-    "不需要。观众链接是匿名且只读的。任何拥有链接的人都能打开同步视图，但无法修改活动。",
+  "Does the speaker need an account?": "演讲者需要账户吗？",
+  "No. The speaker link is anonymous and read-only. Anyone with the link can open the synchronized display, but they cannot change the event.":
+    "不需要。演讲者链接是匿名且只读的。任何拥有链接的人都能打开同步视图，但无法修改活动。",
   "Can another person help control the event?": "其他人可以协助控制活动吗？",
   "Yes. Create a reusable 24-hour invitation link from Event access. It signs the recipient into this event without revealing its password and can be revoked whenever you want.":
     "可以。在“活动访问”中创建一个 24 小时内可重复使用的邀请链接。接收者无需知道密码即可登录此活动，且你可以随时撤销邀请。",
@@ -151,8 +151,8 @@ const zh = {
   "No. Only the operator opens the Timer Zoom App. Once the operator selects Sync to Zoom, the Dynamic Indicator is visible to everyone in that meeting.":
     "不需要。只有操作员需要打开 Timer Zoom 应用。选择“同步到 Zoom”后，会议中的所有人都能看到动态指示器。",
   "Will the timer survive a temporary network problem?": "临时网络故障会影响计时器吗？",
-  "The controller keeps a local working copy and clearly shows its save state. Pending changes retry when connectivity returns, while audience displays keep deriving the countdown from its deadline.":
-    "控制台会保留本地工作副本并清楚显示保存状态。网络恢复后会重试待处理的更改，观众视图则会继续根据截止时间计算倒计时。",
+  "The controller keeps a local working copy and clearly shows its save state. Pending changes retry when connectivity returns, while speaker views keep deriving the countdown from its deadline.":
+    "控制台会保留本地工作副本并清楚显示保存状态。网络恢复后会重试待处理的更改，演讲者视图则会继续根据截止时间计算倒计时。",
   "Ready when the room is.": "现场准备好，Timer 就准备好。",
   "Create the event, share the right view, and let every screen follow one authoritative clock.":
     "创建活动、分享合适的视图，让每块屏幕都跟随同一个权威时钟。",
@@ -179,8 +179,8 @@ const zh = {
   "Now speaking · Mina": "正在发言 · Mina",
   Reset: "重置",
   "18 min of programme left": "流程剩余 18 分钟",
-  "Audience sound is local to this display": "观众声音仅在此显示设备上播放",
-  "Fullscreen audience": "全屏观众视图",
+  "Sound is local to the speaker display": "提示音只在演讲者显示设备上播放",
+  "Fullscreen speaker view": "全屏演讲者视图",
   "Zoom synced": "Zoom 已同步",
 
   // Event creation and editing
@@ -391,19 +391,18 @@ const zh = {
   "Load latest version": "加载最新版本",
   Complete: "已完成",
   "On now": "正在进行",
-  Audience: "观众视图",
   Part: "第",
   of: "段，共",
   "Total time": "总时长",
   Host: "主持人",
   total: "总计",
   "Go to": "跳转到",
-  "Audience link copied to clipboard": "观众链接已复制到剪贴板",
+  "Speaker link copied to clipboard": "演讲者链接已复制到剪贴板",
   "You have unresolved changes. Save or undo them before moving to another part.":
     "你还有未处理的更改。请先保存或撤销，再跳转到其他部分。",
   Edit: "编辑",
-  "Open audience": "打开观众视图",
-  "Copy audience link": "复制观众链接",
+  "Open speaker view": "打开演讲者视图",
+  "Copy speaker link": "复制演讲者链接",
   "Show the run of show": "显示活动流程",
   "Focus on the timer": "专注显示计时器",
   "Show run of show": "显示活动流程",
@@ -456,14 +455,14 @@ const zh = {
   "Zoom code copied to clipboard": "Zoom 代码已复制到剪贴板",
   "Coming up": "即将开始",
   "Reset topic": "重置环节",
-  "The run of show, its audience link, and its controller credentials are removed for everyone. This cannot be undone.":
-    "活动流程、观众链接和操作员凭据将对所有人永久删除。此操作无法撤销。",
+  "The run of show, its speaker link, and its controller credentials are removed for everyone. This cannot be undone.":
+    "活动流程、演讲者链接和操作员凭据将对所有人永久删除。此操作无法撤销。",
   "Delete event": "删除活动",
   "The event was not deleted. Nothing has changed — try again when the connection is back.":
     "活动未被删除，任何内容都没有变化。请在网络恢复后重试。",
   "End this event?": "结束此活动？",
-  "Every audience display switches to the completed screen. You can start the event again afterwards.":
-    "所有观众视图都会切换到活动完成页面。之后仍可重新开始活动。",
+  "Every speaker view switches to the completed screen. You can start the event again afterwards.":
+    "所有演讲者视图都会切换到活动完成页面。之后仍可重新开始活动。",
   "End event": "结束活动",
   "Signing out did not complete, so this device may still be signed in.": "退出登录未完成，此设备可能仍处于登录状态。",
   "This event was changed somewhere else": "此活动已在其他位置更改",
@@ -484,7 +483,7 @@ const zh = {
   "Date not set": "未设置日期",
   "Untitled event": "未命名活动",
 
-  // Audience display and sounds
+  // Speaker view and sounds
   "Waiting for the event": "等待活动开始",
   "Not live yet.": "尚未开始。",
   Waiting: "等待中",

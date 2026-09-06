@@ -1,6 +1,6 @@
 # Timer
 
-Timer is a focused event timer for single speakers and multi-speaker panels. An administrator controls the active timer while any number of audience displays follow along through one shareable link.
+Timer is a focused event timer for single speakers and multi-speaker panels. An administrator controls the active timer while any number of speaker views follow along through one shareable link.
 
 ## What is included
 
@@ -17,7 +17,7 @@ Timer is a focused event timer for single speakers and multi-speaker panels. An 
 - Draft-and-save editing for upcoming live agenda items, with drag-to-reorder and conflict notice
 - Focus mode for the live console
 - Compact live control room with a wall clock and a visible cloud save state
-- Fullscreen audience display
+- Fullscreen speaker view
 - Zoom App that publishes the live speaker countdown to every meeting participant
 - Cloud synchronization by polling: a controller device picks up another device's committed changes within about a second
 - Atomic, versioned event writes through server-only route handlers
@@ -56,7 +56,7 @@ event's visible title changes.
 - There is **no recovery code or email reset flow**. A device with a live session
   can change or delete the event. If every session and the password are lost, create
   a new event.
-- **Audience links stay anonymous and read-only** through an unguessable viewer
+- **Speaker links stay anonymous and read-only** through an unguessable viewer
   token, and the **Zoom App stays anonymous and read-only** through a pairing
   code. Neither needs controller credentials.
 - The underlying tables are **not publicly writable**. Credential, session, and
@@ -120,7 +120,7 @@ version check already handles.
 
 **No browser ever publishes state.** Every screen reads. There is no Supabase
 Realtime channel in the client, because a public Broadcast channel is one that
-anybody holding an audience link could also publish on — which would let them push
+anybody holding a speaker link could also publish on — which would let them push
 a fabricated timer to every screen watching.
 
 ## Connect Supabase
@@ -213,10 +213,10 @@ Password changes go through `change_controller_password` for the same reason.
 
 `event_runtime.remaining_seconds` and `panel_remaining_seconds` accept negative
 values within ±86400, because a countdown does not stop at zero. Overtime persists,
-reloads, synchronises across devices, and reaches audience and Zoom screens as the
+reloads, synchronises across devices, and reaches speaker and Zoom screens as the
 negative number it is.
 
-Public audience data is exposed only through an unguessable viewer token and a
+Public speaker-view data is exposed only through an unguessable viewer token and a
 narrow security-definer function; an event also carries an optional `zoom_token`
 read through a second function of the same shape. Both remain executable by `anon`,
 return no team field, and need no team join.

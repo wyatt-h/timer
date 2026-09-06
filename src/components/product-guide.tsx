@@ -49,15 +49,15 @@ const tourStages = [
     eyebrow: "Share",
     title: "Put the same clock everywhere it matters.",
     description:
-      "Open the fullscreen audience display, invite another controller, or publish the countdown in a Zoom meeting.",
+      "Open the fullscreen speaker view, invite another controller, or publish the countdown in a Zoom meeting.",
   },
 ];
 
 const faqs = [
   {
-    question: "Does the audience need an account?",
+    question: "Does the speaker need an account?",
     answer:
-      "No. The audience link is anonymous and read-only. Anyone with the link can open the synchronized display, but they cannot change the event.",
+      "No. The speaker link is anonymous and read-only. Anyone with the link can open the synchronized display, but they cannot change the event.",
   },
   {
     question: "Can another person help control the event?",
@@ -77,7 +77,7 @@ const faqs = [
   {
     question: "Will the timer survive a temporary network problem?",
     answer:
-      "The controller keeps a local working copy and clearly shows its save state. Pending changes retry when connectivity returns, while audience displays keep deriving the countdown from its deadline.",
+      "The controller keeps a local working copy and clearly shows its save state. Pending changes retry when connectivity returns, while speaker views keep deriving the countdown from its deadline.",
   },
 ];
 
@@ -289,7 +289,7 @@ function StagePreview({ stage }: { stage: TourStage }) {
             <h3 className="mt-3 text-[clamp(1.6rem,5vw,2.6rem)] font-semibold tracking-[-0.04em]">Avery Chen</h3>
             <p className="tabular mt-5 font-mono text-[clamp(4.5rem,15vw,8rem)] leading-none font-semibold tracking-[-0.1em] text-[#f8f7fc]">09:48</p>
             <div className="mx-auto mt-5 flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/6 px-3 py-2 text-[10px] text-white/65">
-              <Volume2 size={11} /> Audience sound is local to this display
+              <Volume2 size={11} /> Sound is local to the speaker display
             </div>
           </div>
           <div className="absolute top-4 right-4 flex items-center gap-2 rounded-full border border-[#ffb000] bg-[#242429] py-1.5 pr-2.5 pl-1.5 shadow-lg">
@@ -297,7 +297,7 @@ function StagePreview({ stage }: { stage: TourStage }) {
             <span className="tabular font-mono text-[11px] font-semibold">09:48</span>
           </div>
           <div className="absolute right-4 bottom-4 left-4 flex items-center justify-between rounded-[13px] border border-white/10 bg-white/6 px-3 py-2.5 text-[9px] text-white/60 backdrop-blur-md">
-            <span className="inline-flex items-center gap-1.5"><Monitor size={10} /> Fullscreen audience</span>
+            <span className="inline-flex items-center gap-1.5"><Monitor size={10} /> Fullscreen speaker view</span>
             <span className="inline-flex items-center gap-1.5"><Video size={10} /> Zoom synced</span>
           </div>
         </div>
@@ -350,7 +350,7 @@ export function ProductGuide() {
                 <span className="text-violet">Every room.</span>
               </h1>
               <p className="mt-7 max-w-[540px] text-[clamp(1rem,1.7vw,1.25rem)] leading-[1.65] text-text-muted">
-                Build the run of show, control every transition, and keep the audience and Zoom meeting perfectly in step.
+                Build the run of show, control every transition, and keep the speaker view and Zoom meeting perfectly in step.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button asChild variant="primary" className="h-12 px-5">
@@ -361,7 +361,7 @@ export function ProductGuide() {
                 </Button>
               </div>
               <div className="mt-9 flex flex-wrap gap-x-5 gap-y-2 text-[11px] font-semibold text-text-subtle">
-                {["No user account", "Per-event access", "Audience stays read-only"].map((item) => (
+                {["No user account", "Per-event access", "Speaker view stays read-only"].map((item) => (
                   <span key={item} className="inline-flex items-center gap-1.5"><Check size={12} className="text-success" />{item}</span>
                 ))}
               </div>
@@ -374,7 +374,7 @@ export function ProductGuide() {
           <div className="mx-auto grid w-[min(1080px,100%)] gap-5 sm:grid-cols-3">
             {[
               [Users, "For the operator", "A focused live control room"],
-              [Monitor, "For the audience", "A fullscreen synchronized clock"],
+              [Monitor, "For the speaker", "A fullscreen synchronized clock"],
               [Video, "For the meeting", "A native Zoom indicator"],
             ].map(([Icon, title, text]) => (
               <div key={String(title)} className="flex items-center gap-3 sm:justify-center">
@@ -433,13 +433,13 @@ export function ProductGuide() {
                 <span className="text-[11px] font-bold tracking-[0.12em] text-[#9b83f5] uppercase">Three experiences</span>
                 <h2 className="mt-3 text-[clamp(2.8rem,5.5vw,5rem)] leading-[0.95] font-semibold tracking-[-0.065em]">Everyone sees exactly what they need.</h2>
               </div>
-              <p className="max-w-[560px] text-[14px] leading-relaxed text-white/55 lg:justify-self-end">The controller can change the event. The audience receives a clean read-only display. Zoom participants see the shared countdown without opening another window.</p>
+              <p className="max-w-[560px] text-[14px] leading-relaxed text-white/55 lg:justify-self-end">The controller can change the event. The speaker receives a clean read-only countdown. Zoom participants see the shared countdown without opening another window.</p>
             </div>
 
             <div className="mt-14 grid gap-4 lg:grid-cols-3">
               {[
                 { icon: Users, number: "01", title: "Event controller", copy: "Run the clock, edit what is coming next, share access, and watch every save reach the cloud.", chips: ["Start · pause · reset", "Draft and save", "Projected finish"] },
-                { icon: Monitor, number: "02", title: "Audience display", copy: "A high-contrast fullscreen countdown with local alarm choice and a clear overtime state.", chips: ["Anonymous link", "Read-only", "Local sound"] },
+                { icon: Monitor, number: "02", title: "Speaker view", copy: "A high-contrast fullscreen countdown showing exactly how much time the speaker has left, with a local alarm choice and clear overtime state.", chips: ["Anonymous link", "Read-only", "Local sound"] },
                 { icon: Video, number: "03", title: "Zoom indicator", copy: "Pair the event in a meeting and publish the live speaker countdown to every participant.", chips: ["Operator installs", "Meeting-wide", "Opt-in sharing"] },
               ].map((item, index) => (
                 <article key={item.title} className={cn("group relative overflow-hidden rounded-[24px] border border-white/10 p-6 transition-transform duration-200 hover:-translate-y-1", index === 1 ? "bg-[linear-gradient(145deg,rgba(119,87,237,0.24),rgba(255,255,255,0.04))]" : "bg-white/[0.04]")}> 
@@ -516,7 +516,7 @@ export function ProductGuide() {
               <h2 className="mt-3 text-[clamp(2.7rem,5vw,4.7rem)] leading-[0.96] font-semibold tracking-[-0.065em]">An event is its own secure workspace.</h2>
               <p className="mt-5 max-w-[570px] text-[14px] leading-relaxed text-text-muted">There are no teams or user directories to manage. Each event has its own login and password, while temporary invitation links make it easy to bring another controller into the room.</p>
               <div className="mt-7 grid gap-3 sm:grid-cols-2">
-                {["Audience links can never edit", "Invitations expire after 24 hours", "Sessions are remembered per device", "Invitation access can be revoked"].map((item) => <span key={item} className="flex items-center gap-2 text-[11px] font-semibold text-text-muted"><Check size={13} className="text-success" />{item}</span>)}
+                {["Speaker links can never edit", "Invitations expire after 24 hours", "Sessions are remembered per device", "Invitation access can be revoked"].map((item) => <span key={item} className="flex items-center gap-2 text-[11px] font-semibold text-text-muted"><Check size={13} className="text-success" />{item}</span>)}
               </div>
             </div>
             <div className="rounded-[26px] border border-line bg-white p-5 shadow-[0_25px_70px_rgba(35,28,65,0.1)]">

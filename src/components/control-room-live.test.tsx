@@ -37,6 +37,8 @@ describe("live run-of-show drafts", () => {
     expect(clock).not.toHaveClass("text-success");
     expect(clock.parentElement).toHaveClass("bg-surface-sunken");
     expect(clock.parentElement).not.toHaveClass("bg-success-soft");
+    expect(screen.getByRole("link", { name: "Open speaker view" })).toBeInTheDocument();
+    expect(screen.queryByText("Audience")).not.toBeInTheDocument();
   });
 
   it("freezes and persists a timer abandoned beyond the overtime limit", async () => {

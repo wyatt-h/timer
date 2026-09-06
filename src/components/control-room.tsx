@@ -1208,7 +1208,7 @@ export function LiveConsole({
         {announcement}
       </p>
       <p className="sr-only" role="status" aria-live="polite">
-        {copied ? "Audience link copied to clipboard" : ""}
+        {copied ? "Speaker link copied to clipboard" : ""}
       </p>
 
       {blockedNavigationNotice && (
@@ -1257,23 +1257,24 @@ export function LiveConsole({
           </Link>
           {/*
             * Open-and-copy as one control: both actions concern the same
-            * audience link, so they belong together rather than in a panel
+            * speaker link, so they belong together rather than in a panel
             * at the far end of the sidebar.
             */}
           <div className="inline-flex">
             <Link
               href={viewerPath}
               target="_blank"
+              aria-label="Open speaker view"
               className="inline-flex min-h-11 items-center gap-2 rounded-l-control rounded-r-none border border-line bg-white px-3.5 text-[13px] font-semibold transition-colors duration-150 hover:bg-surface-hover"
             >
               <Maximize2 size={14} />
-              Audience
+              Speaker view
             </Link>
             <button
               className="grid w-10 -ml-px place-items-center rounded-l-none rounded-r-control border border-line bg-white transition-colors duration-150 hover:bg-surface-hover"
               onClick={copyLink}
-              aria-label="Copy audience link"
-              title="Copy audience link"
+              aria-label="Copy speaker link"
+              title="Copy speaker link"
             >
               {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
             </button>
@@ -1703,7 +1704,7 @@ export function LiveConsole({
       <ConfirmDialog
         open={confirmingDelete}
         title={`Delete ${event.name}?`}
-        body="The run of show, its audience link, and its controller credentials are removed for everyone. This cannot be undone."
+        body="The run of show, its speaker link, and its controller credentials are removed for everyone. This cannot be undone."
         confirmLabel="Delete event"
         onConfirm={() => {
           setConfirmingDelete(false);
@@ -1723,7 +1724,7 @@ export function LiveConsole({
       <ConfirmDialog
         open={confirmingEnd}
         title="End this event?"
-        body="Every audience display switches to the completed screen. You can start the event again afterwards."
+        body="Every speaker view switches to the completed screen. You can start the event again afterwards."
         confirmLabel="End event"
         onConfirm={endEvent}
         onCancel={() => setConfirmingEnd(false)}

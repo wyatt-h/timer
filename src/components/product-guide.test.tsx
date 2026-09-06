@@ -8,7 +8,7 @@ describe("ProductGuide", () => {
 
     expect(screen.getByRole("heading", { name: "One clock. Every room." })).toBeInTheDocument();
     expect(screen.getByText("Event controller")).toBeInTheDocument();
-    expect(screen.getByText("Audience display")).toBeInTheDocument();
+    expect(screen.getByText("Speaker view")).toBeInTheDocument();
     expect(screen.getByText("Zoom indicator")).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Create an event/i }).length).toBeGreaterThan(0);
   });
@@ -30,14 +30,14 @@ describe("ProductGuide", () => {
         name: "Share: Put the same clock everywhere it matters.",
       }),
     );
-    expect(screen.getByText("Audience sound is local to this display")).toBeInTheDocument();
+    expect(screen.getByText("Sound is local to the speaker display")).toBeInTheDocument();
   });
 
   it("provides anchored navigation and accessible FAQ content", () => {
     render(<ProductGuide />);
 
     expect(screen.getByRole("navigation", { name: "Guide navigation" })).toBeInTheDocument();
-    expect(screen.getByText("Does the audience need an account?")).toBeInTheDocument();
-    expect(screen.getByText(/anonymous and read-only/i)).toBeInTheDocument();
+    expect(screen.getByText("Does the speaker need an account?")).toBeInTheDocument();
+    expect(screen.getByText(/speaker link is anonymous and read-only/i)).toBeInTheDocument();
   });
 });
