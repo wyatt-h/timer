@@ -192,15 +192,14 @@ Summit,3,single,,Elena Park,8,,`}
             {parsed && (
               <div className="rounded-control border border-success/20 bg-success-soft p-3.5">
                 <strong className="mb-2 block text-[13px] text-success">
-                  {parsed.length} event{parsed.length === 1 ? "" : "s"} ready
+                  {`${parsed.length} event${parsed.length === 1 ? "" : "s"} ready`}
                 </strong>
                 <ul className="grid gap-1.5">
                   {parsed.map((event) => (
                     <li key={event.id} className="flex items-baseline justify-between gap-3 text-[13px]">
                       <span>{event.name}</span>
                       <span className="text-[12px] leading-relaxed text-text-subtle">
-                        {event.agenda.length} item{event.agenda.length === 1 ? "" : "s"} ·{" "}
-                        {formatDuration(eventDuration(event))}
+                        {`${event.agenda.length} item${event.agenda.length === 1 ? "" : "s"} · ${formatDuration(eventDuration(event))}`}
                       </span>
                     </li>
                   ))}

@@ -153,9 +153,7 @@ export function AgendaEditor({
             </h2>
             {showSummary && (
               <p className="mt-1 text-[13px] text-text-muted">
-                {items.length} {items.length === 1 ? "item" : "items"}
-                <span aria-hidden> · </span>
-                <span className="tabular">{programmeMinutes}</span> min total
+                {`${items.length} ${items.length === 1 ? "item" : "items"} · ${programmeMinutes} min total`}
               </p>
             )}
           </div>

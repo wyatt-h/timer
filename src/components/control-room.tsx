@@ -775,7 +775,7 @@ export function LiveConsole({
         <div>
           <h2 className="text-[24px] font-semibold tracking-[-0.045em]">Up next</h2>
           <span className="text-[12px] text-text-subtle">
-            {Math.max(0, agendaDraft.length - currentAgendaIndex - 1)} upcoming
+            {`${Math.max(0, agendaDraft.length - currentAgendaIndex - 1)} upcoming`}
           </span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1057,7 +1057,7 @@ export function LiveConsole({
                       {itemLabel(item)}
                     </h3>
                     <p className="mt-1 text-[12px] text-text-subtle">
-                      {formatDuration(item.durationSeconds)} total
+                      {`${formatDuration(item.durationSeconds)} total`}
                     </p>
                     {isCurrent && item.kind === "panel" && (
                       /*
@@ -1363,7 +1363,7 @@ export function LiveConsole({
                     : "Ready"}
             </span>
             <span className="tabular text-[12px] font-semibold text-text-subtle">
-              Part {segmentIndex + 1} of {segments.length}
+              {`Part ${segmentIndex + 1} of ${segments.length}`}
             </span>
           </div>
 
@@ -1399,8 +1399,7 @@ export function LiveConsole({
                 </strong>
                 {speakerAutoStopped && (
                   <p role="status" className="mb-2.5 text-[12px] font-semibold text-over">
-                    {formatDuration(MAX_OVERTIME_SECONDS)} overtime limit reached. Reset or add
-                    time to continue.
+                    {`${formatDuration(MAX_OVERTIME_SECONDS)} overtime limit reached. Reset or add time to continue.`}
                   </p>
                 )}
                 <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
@@ -1433,7 +1432,7 @@ export function LiveConsole({
                 </strong>
                 {panelAutoStopped && (
                   <p role="status" className="mb-2.5 text-[12px] font-semibold text-over">
-                    {formatDuration(MAX_OVERTIME_SECONDS)} overtime limit reached.
+                    {`${formatDuration(MAX_OVERTIME_SECONDS)} overtime limit reached.`}
                   </p>
                 )}
                 <TimerProgress label="Panel progress" ratio={panelProgress} tone={panelTone} />
@@ -1468,8 +1467,7 @@ export function LiveConsole({
               </strong>
               {speakerAutoStopped && (
                 <p role="status" className="mb-3 text-[12px] font-semibold text-over">
-                  {formatDuration(MAX_OVERTIME_SECONDS)} overtime limit reached. Reset or add time
-                  to continue.
+                  {`${formatDuration(MAX_OVERTIME_SECONDS)} overtime limit reached. Reset or add time to continue.`}
                 </p>
               )}
               <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
@@ -1514,7 +1512,7 @@ export function LiveConsole({
               {projectedFinish ? formatClockTime(projectedFinish) : "--:--"}
             </strong>
             <small className="text-[12px] text-text-subtle">
-              {formatDuration(Math.max(0, remainingProgramSeconds))} of programme left
+              {`${formatDuration(Math.max(0, remainingProgramSeconds))} of programme left`}
             </small>
           </div>
 

@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { useAppLanguage } from "@/components/language-provider";
 import { minutesFromSeconds } from "@/lib/format";
+import { translateText } from "@/lib/i18n";
 import type {
   TextFieldType,
 } from "@material/web/textfield/outlined-text-field.js";
@@ -116,6 +118,14 @@ export const MaterialOutlinedField = React.forwardRef<
   forwardedRef,
 ) {
   const fieldRef = useRef<MaterialTextFieldElement | null>(null);
+  const { language } = useAppLanguage();
+  const localizedLabel = translateText(label, language);
+  const localizedPlaceholder = translateText(placeholder, language);
+  const localizedAriaLabel = translateText(ariaLabel ?? label, language);
+  const localizedErrorText = translateText(errorText, language);
+  const localizedSupportingText = translateText(supportingText, language);
+  const localizedPrefixText = translateText(prefixText, language);
+  const localizedSuffixText = translateText(suffixText, language);
 
   React.useImperativeHandle(forwardedRef, () => fieldRef.current!, []);
 
@@ -124,11 +134,11 @@ export const MaterialOutlinedField = React.forwardRef<
     void registerMaterialTextField().then(() => {
       if (!active || !fieldRef.current) return;
       Object.assign(fieldRef.current, {
-        label,
+        label: localizedLabel,
         value,
         type,
         name,
-        placeholder,
+        placeholder: localizedPlaceholder,
         inputMode,
         min,
         max,
@@ -138,10 +148,10 @@ export const MaterialOutlinedField = React.forwardRef<
         readOnly,
         required,
         error: invalid,
-        errorText,
-        supportingText,
-        prefixText,
-        suffixText,
+        errorText: localizedErrorText,
+        supportingText: localizedSupportingText,
+        prefixText: localizedPrefixText,
+        suffixText: localizedSuffixText,
         noSpinner,
       });
     });
@@ -151,21 +161,21 @@ export const MaterialOutlinedField = React.forwardRef<
   }, [
     autoComplete,
     disabled,
-    errorText,
     inputMode,
     invalid,
-    label,
+    localizedErrorText,
+    localizedLabel,
+    localizedPlaceholder,
+    localizedPrefixText,
+    localizedSuffixText,
+    localizedSupportingText,
     max,
     min,
     name,
     noSpinner,
-    placeholder,
-    prefixText,
     readOnly,
     required,
     step,
-    suffixText,
-    supportingText,
     type,
     value,
   ]);
@@ -177,11 +187,11 @@ export const MaterialOutlinedField = React.forwardRef<
       id,
       className,
       "data-slot": "input",
-      label,
+      label: localizedLabel,
       value,
       type,
       name,
-      placeholder,
+      placeholder: localizedPlaceholder,
       inputMode,
       min,
       max,
@@ -191,12 +201,12 @@ export const MaterialOutlinedField = React.forwardRef<
       readOnly,
       required,
       error: invalid,
-      errorText,
-      supportingText,
-      prefixText,
-      suffixText,
+      errorText: localizedErrorText,
+      supportingText: localizedSupportingText,
+      prefixText: localizedPrefixText,
+      suffixText: localizedSuffixText,
       noSpinner,
-      "aria-label": ariaLabel ?? label,
+      "aria-label": localizedAriaLabel,
       "aria-describedby": ariaDescribedBy,
       "aria-haspopup": ariaHasPopup,
       "aria-expanded": ariaExpanded,

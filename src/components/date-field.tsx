@@ -3,6 +3,7 @@
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { useAppLanguage } from "@/components/language-provider";
 import { cn } from "@/lib/utils";
 
 type DateFieldProps = {
@@ -11,7 +12,10 @@ type DateFieldProps = {
   onChange: (value: string) => void;
 };
 
-const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
+const WEEKDAYS = {
+  en: ["M", "T", "W", "T", "F", "S", "S"],
+  zh: ["一", "二", "三", "四", "五", "六", "日"],
+};
 
 function toIso(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -38,6 +42,7 @@ function monthLength(year: number, month: number) {
  * control that ignored the app's styling entirely.
  */
 export function DateField({ id, value, onChange }: DateFieldProps) {
+  const { language, locale } = useAppLanguage();
   const parsed = parseIso(value);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => ({
@@ -83,7 +88,7 @@ export function DateField({ id, value, onChange }: DateFieldProps) {
   const today = new Date();
   const todayIso = toIso(today.getFullYear(), today.getMonth(), today.getDate());
   const label = parsed
-    ? new Intl.DateTimeFormat("en-US", {
+    ? new Intl.DateTimeFormat(locale, {
         weekday: "short",
         month: "short",
         day: "numeric",
@@ -91,7 +96,7 @@ export function DateField({ id, value, onChange }: DateFieldProps) {
       }).format(new Date(`${value}T12:00:00`))
     : "Choose a date";
 
-  const monthLabel = new Intl.DateTimeFormat("en-US", {
+  const monthLabel = new Intl.DateTimeFormat(locale, {
     month: "long",
     year: "numeric",
   }).format(new Date(view.year, view.month, 1));
@@ -141,7 +146,7 @@ export function DateField({ id, value, onChange }: DateFieldProps) {
           </div>
 
           <div role="grid" className="grid grid-cols-7 gap-0.5">
-            {WEEKDAYS.map((weekday, index) => (
+            {WEEKDAYS[language].map((weekday, index) => (
               <span className="grid h-[26px] place-items-center text-[12px] font-bold text-text-subtle/80" key={`${weekday}-${index}`} aria-hidden>
                 {weekday}
               </span>

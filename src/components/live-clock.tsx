@@ -2,9 +2,11 @@
 
 import { Clock3 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useAppLanguage } from "@/components/language-provider";
 import { cn } from "@/lib/utils";
 
 export function LiveClock({ compact = false }: { compact?: boolean }) {
+  const { locale } = useAppLanguage();
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export function LiveClock({ compact = false }: { compact?: boolean }) {
     >
       <Clock3 size={compact ? 13 : 15} aria-hidden />
       {now
-        ? new Intl.DateTimeFormat("en-US", {
+        ? new Intl.DateTimeFormat(locale, {
             hour: "numeric",
             minute: "2-digit",
             second: compact ? undefined : "2-digit",

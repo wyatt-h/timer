@@ -108,7 +108,7 @@ export function ImportCredentialsPanel({
       <Card className="grid gap-4 p-5">
         <div>
           <h2 className="text-[20px] font-semibold tracking-[-0.04em]">
-            {created.length} event{created.length === 1 ? "" : "s"} imported
+            {`${created.length} event${created.length === 1 ? "" : "s"} imported`}
           </h2>
           <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">
             The import stopped before every event was created. These events are ready:
@@ -138,7 +138,7 @@ export function ImportCredentialsPanel({
           Cancel the import
         </Button>
         <h2 className="mt-3 text-[22px] font-semibold tracking-[-0.04em]">
-          Password for {events.length} event{events.length === 1 ? "" : "s"}
+          {`Password for ${events.length} event${events.length === 1 ? "" : "s"}`}
         </h2>
         <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">
           Give each imported event a login name made from lowercase letters, numbers, and dashes.
