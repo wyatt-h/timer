@@ -22,7 +22,7 @@ describe("CredentialsFields", () => {
       screen.getByRole("heading", { name: "Make access easy to share" }),
     ).toBeInTheDocument();
     expect(screen.getByText("fnh0915 / fnh0915")).toBeInTheDocument();
-    expect(screen.getByText("globalcall0824 / globalcall0824")).toBeInTheDocument();
+    expect(screen.queryByText("globalcall0824 / globalcall0824")).not.toBeInTheDocument();
     expect(screen.getByText("wyatth / wyatth")).toBeInTheDocument();
     expect(
       screen.getByText("Base the login name on the event—not on the person running the timer."),

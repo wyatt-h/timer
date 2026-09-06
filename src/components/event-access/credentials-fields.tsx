@@ -111,9 +111,6 @@ export function CredentialsFields({
               Good examples
             </p>
             <p className="mt-2 font-mono text-[12px] font-semibold text-ink">fnh0915 / fnh0915</p>
-            <p className="mt-1 font-mono text-[12px] font-semibold text-ink">
-              globalcall0824 / globalcall0824
-            </p>
             <p className="mt-1.5 text-[10px] text-text-subtle">Login name / password</p>
           </div>
 
