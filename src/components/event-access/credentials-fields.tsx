@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CircleCheck } from "lucide-react";
+import { CircleCheck, CircleX, Lightbulb } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   loginNameProblem,
@@ -82,6 +82,52 @@ export function CredentialsFields({
 
   return (
     <div className="grid gap-4">
+      <section
+        aria-labelledby="shareable-access-guidance"
+        className="rounded-card border border-violet/15 bg-violet-soft/35 p-4"
+      >
+        <div className="flex items-center gap-2 text-violet-dark">
+          <Lightbulb size={16} aria-hidden />
+          <h2 id="shareable-access-guidance" className="text-[14px] font-semibold">
+            Make access easy to share
+          </h2>
+        </div>
+        <ul className="mt-3 grid list-disc gap-1.5 pl-5 text-[12px] leading-relaxed text-text-muted marker:text-violet">
+          <li>
+            Keep both values short and simple so another controller can type or share them easily.
+          </li>
+          <li>
+            For easiest sharing and remembering, use the same event code for the login name and password.
+          </li>
+          <li>
+            Base the login name on the event—not on the person running the timer.
+          </li>
+        </ul>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="rounded-control border border-success/20 bg-success-soft/70 p-3">
+            <p className="flex items-center gap-1.5 text-[12px] font-semibold text-success">
+              <CircleCheck size={14} aria-hidden />
+              Good examples
+            </p>
+            <p className="mt-2 font-mono text-[12px] font-semibold text-ink">fnh0915 / fnh0915</p>
+            <p className="mt-1 font-mono text-[12px] font-semibold text-ink">
+              globalcall0824 / globalcall0824
+            </p>
+            <p className="mt-1.5 text-[10px] text-text-subtle">Login name / password</p>
+          </div>
+
+          <div className="rounded-control border border-over/20 bg-over-soft/65 p-3">
+            <p className="flex items-center gap-1.5 text-[12px] font-semibold text-over">
+              <CircleX size={14} aria-hidden />
+              Avoid personal names
+            </p>
+            <p className="mt-2 font-mono text-[12px] font-semibold text-ink">wyatth / wyatth</p>
+            <p className="mt-1.5 text-[10px] text-text-subtle">Personal name / password</p>
+          </div>
+        </div>
+      </section>
+
       <Input
         id="event-login-name"
         label="Event login name"

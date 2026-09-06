@@ -15,6 +15,20 @@ function Harness() {
 }
 
 describe("CredentialsFields", () => {
+  it("shows memorable, event-based credential guidance", () => {
+    render(<Harness />);
+
+    expect(
+      screen.getByRole("heading", { name: "Make access easy to share" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("fnh0915 / fnh0915")).toBeInTheDocument();
+    expect(screen.getByText("globalcall0824 / globalcall0824")).toBeInTheDocument();
+    expect(screen.getByText("wyatth / wyatth")).toBeInTheDocument();
+    expect(
+      screen.getByText("Base the login name on the event—not on the person running the timer."),
+    ).toBeInTheDocument();
+  });
+
   it("explains when a login name is normalized", () => {
     render(<Harness />);
     const loginName = screen.getByLabelText("Event login name") as HTMLElement & {

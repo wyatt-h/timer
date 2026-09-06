@@ -275,6 +275,17 @@ const zh = {
   "Removed unsupported characters.": "已移除不支持的字符。",
   "This lowercase login name and password open the event on any device. There is no account, so choose credentials you can share with the people running it.":
     "使用此小写登录名和密码可在任何设备上打开活动。这里没有用户账户，请选择便于与活动工作人员共享的凭据。",
+  "Make access easy to share": "让活动凭据便于分享",
+  "Keep both values short and simple so another controller can type or share them easily.":
+    "登录名和密码都尽量简短，方便其他控制人员输入和转发。",
+  "For easiest sharing and remembering, use the same event code for the login name and password.":
+    "为了便于记忆和分享，建议登录名和密码使用同一个活动代码。",
+  "Base the login name on the event—not on the person running the timer.":
+    "登录名应根据活动本身创建，不要使用计时器操作人员的姓名。",
+  "Good examples": "推荐示例",
+  "Avoid personal names": "避免使用个人姓名",
+  "Login name / password": "登录名 / 密码",
+  "Personal name / password": "个人姓名 / 密码",
   "Enter the event login name and password.": "请输入活动登录名和密码。",
   "Checking…": "正在验证…",
   "Password changed. Every other device has been signed out.": "密码已更改，其他所有设备均已退出登录。",
