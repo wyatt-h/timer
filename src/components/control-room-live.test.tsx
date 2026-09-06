@@ -11,6 +11,50 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("live run-of-show drafts", () => {
+  it("keeps projected finish visible while expanding host transition timing", () => {
+    const event = makeEvent("Friday Night");
+    const panel = makeAgendaItem("panel");
+    const closing = makeAgendaItem("single");
+    event.agenda.push(panel, closing);
+    event.hostTransitionSeconds = 90;
+    event.status = "live";
+    const update = vi.fn<(updater: (current: TimerEvent) => TimerEvent) => void>();
+
+    render(
+      <LiveConsole
+        event={event}
+        loginName="friday-night"
+        segments={flattenSegments(event)}
+        update={update}
+        saveState="idle"
+        onRetrySave={vi.fn()}
+        onDiscardLocal={vi.fn(async () => ({ ok: true }))}
+        onKeepLocal={vi.fn(async () => ({ ok: true }))}
+        onFlushSaves={vi.fn()}
+        onDelete={vi.fn(async () => ({ ok: true }))}
+        onSignOut={vi.fn(async () => ({ ok: true }))}
+        conflictResolution={null}
+      />,
+    );
+
+    const details = screen.getByText("Projected finish").closest("details");
+    expect(details).not.toHaveAttribute("open");
+    expect(details).toHaveTextContent("30 min of programme left");
+
+    fireEvent.click(screen.getByText("Projected finish"));
+    expect(details).toHaveAttribute("open");
+    expect(screen.getByText("2 upcoming transitions add 3 min")).toBeInTheDocument();
+
+    const input = screen.getByLabelText("Host transition between agenda items") as HTMLElement & {
+      value: string;
+    };
+    input.value = "2";
+    fireEvent.input(input);
+
+    expect(update).toHaveBeenCalledOnce();
+    expect(update.mock.calls[0][0](event).hostTransitionSeconds).toBe(120);
+  });
+
   it("uses neutral timer styling while more than 30 seconds remain", () => {
     const event = makeEvent("Friday Night");
     event.status = "live";

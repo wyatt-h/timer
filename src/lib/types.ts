@@ -50,6 +50,11 @@ export interface TimerEvent {
   status: EventStatus;
   viewerToken: string;
   /**
+   * Planning allowance inserted between agenda items when projecting the finish.
+   * Undefined means zero for events created before this setting was introduced.
+   */
+  hostTransitionSeconds?: number;
+  /**
    * Pairing code for the Zoom App, created on demand from the control room.
    * Absent until an operator asks for one, so no event carries a code it has
    * never needed.

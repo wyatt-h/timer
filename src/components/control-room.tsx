@@ -93,6 +93,17 @@ export function panelistTimingIsLocked(
   return flatSpeakerIndex <= currentSegmentIndex;
 }
 
+/** Host transitions happen between agenda items, never between panelists. */
+export function remainingHostTransitionSeconds(
+  agenda: AgendaItem[],
+  currentAgendaItemId: string,
+  secondsPerTransition: number,
+) {
+  const currentIndex = agenda.findIndex((item) => item.id === currentAgendaItemId);
+  if (currentIndex < 0) return 0;
+  return Math.max(0, agenda.length - currentIndex - 1) * Math.max(0, secondsPerTransition);
+}
+
 export function speakerPatchForItem(
   item: AgendaItem,
   speakerId: string,
@@ -440,6 +451,14 @@ export function LiveConsole({
   const remainingProgramSeconds =
     displaySeconds +
     segments.slice(segmentIndex + 1).reduce((sum, segment) => sum + segment.durationSeconds, 0);
+  const hostTransitionSeconds = event.hostTransitionSeconds ?? 0;
+  const upcomingTransitionCount = Math.max(0, event.agenda.length - currentAgendaIndex - 1);
+  const transitionAllowanceSeconds = remainingHostTransitionSeconds(
+    event.agenda,
+    currentItem.id,
+    hostTransitionSeconds,
+  );
+  const projectedRemainingSeconds = remainingProgramSeconds + transitionAllowanceSeconds;
 
   useEffect(() => {
     const tick = () => {
@@ -468,9 +487,9 @@ export function LiveConsole({
    * as a dependency it would tear down and rebuild this interval five times a
    * second.
    */
-  const latestRemaining = useRef(remainingProgramSeconds);
+  const latestRemaining = useRef(projectedRemainingSeconds);
   useLayoutEffect(() => {
-    latestRemaining.current = remainingProgramSeconds;
+    latestRemaining.current = projectedRemainingSeconds;
   });
 
   useEffect(() => {
@@ -1505,17 +1524,48 @@ export function LiveConsole({
             Reset current topic
           </button>
 
-          <div className="grid grid-cols-[1fr_auto] gap-x-2.5 gap-y-0.5 rounded-field border border-line bg-surface-raised px-3.5 py-3">
-            <span className="text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
-              Projected finish
-            </span>
-            <strong className="tabular col-start-2 row-span-2 self-center text-[19px] font-semibold tracking-[-0.03em]">
-              {projectedFinish ? formatClockTime(projectedFinish) : "--:--"}
-            </strong>
-            <small className="text-[12px] text-text-subtle">
-              {`${formatDuration(Math.max(0, remainingProgramSeconds))} of programme left`}
-            </small>
-          </div>
+          <details className="group rounded-field border border-line bg-surface-raised">
+            <summary className="grid min-h-[66px] cursor-pointer list-none grid-cols-[1fr_auto_auto] items-center gap-x-2.5 px-3.5 py-3 marker:content-none">
+              <span className="text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
+                Projected finish
+              </span>
+              <strong className="tabular col-start-2 row-span-2 self-center text-[19px] font-semibold tracking-[-0.03em]">
+                {projectedFinish ? formatClockTime(projectedFinish) : "--:--"}
+              </strong>
+              <ChevronDown
+                size={14}
+                aria-hidden
+                className="col-start-3 row-span-2 text-text-subtle transition-transform duration-150 group-open:rotate-180"
+              />
+              <small className="text-[12px] text-text-subtle">
+                {`${formatDuration(Math.max(0, remainingProgramSeconds))} of programme left`}
+              </small>
+            </summary>
+            <div className="grid gap-2.5 border-t border-line-soft px-3.5 py-3">
+              <DurationInput
+                seconds={hostTransitionSeconds}
+                minimumMinutes={0}
+                maximumMinutes={60}
+                fallbackMinutes={0}
+                label="Host transition"
+                aria-label="Host transition between agenda items"
+                onSecondsChange={(seconds) =>
+                  update((currentEvent) => ({
+                    ...currentEvent,
+                    hostTransitionSeconds: seconds,
+                  }))
+                }
+              />
+              <p className="text-[12px] leading-relaxed text-text-subtle">
+                Added once between agenda items, not between speakers in the same panel.
+              </p>
+              <p className="text-[12px] font-medium text-text-muted">
+                {upcomingTransitionCount === 0
+                  ? "No upcoming transitions"
+                  : `${upcomingTransitionCount} upcoming transition${upcomingTransitionCount === 1 ? "" : "s"} add ${formatDuration(transitionAllowanceSeconds)}`}
+              </p>
+            </div>
+          </details>
 
           <div className="grid grid-cols-2 gap-2">
             <button

@@ -84,6 +84,11 @@ const zh = {
   "Start · pause · reset": "开始 · 暂停 · 重置",
   "Draft and save": "草稿与保存",
   "Projected finish": "预计结束时间",
+  "Host transition": "主持人转场",
+  "Host transition between agenda items": "议程环节之间的主持人转场时间",
+  "Added once between agenda items, not between speakers in the same panel.":
+    "在每两个议程环节之间计入一次，同一圆桌讨论的嘉宾之间不计入。",
+  "No upcoming transitions": "没有待进行的转场",
   "Speaker view": "演讲者视图",
   "A high-contrast fullscreen countdown showing exactly how much time the speaker has left, with a local alarm choice and clear overtime state.":
     "高对比度全屏倒计时，让演讲者清楚看到剩余时间，并可在本地选择提示音和查看超时状态。",
@@ -676,6 +681,9 @@ function dynamicChinese(source: string): string | null {
   if ((match = source.match(/^(.+) overtime limit reached\.$/))) return `已达到 ${translateText(match[1], "zh")}的超时上限。`;
   if ((match = source.match(/^(.+) of programme left$/))) {
     return `流程剩余 ${translateText(match[1], "zh")}`;
+  }
+  if ((match = source.match(/^(\d+) upcoming transitions? add (.+)$/))) {
+    return `${match[1]} 次待进行的转场将增加 ${translateText(match[2], "zh")}`;
   }
   if ((match = source.match(/^Name of panelist (\d+)$/))) return `圆桌嘉宾 ${match[1]} 的姓名`;
   if ((match = source.match(/^Minutes for (.+)$/))) return `${match[1]} 的分钟数`;

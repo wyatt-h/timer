@@ -39,6 +39,7 @@ const INVITE_MIGRATION = "20260801010000_event_invites.sql";
 const LOGIN_NAME_MIGRATION = "20260801020000_separate_event_login_name.sql";
 const REUSABLE_INVITE_MIGRATION = "20260801030000_reusable_event_invites.sql";
 const LOGIN_NAME_SLUG_MIGRATION = "20260801040000_slug_event_login_names.sql";
+const HOST_TRANSITION_MIGRATION = "20260906000000_add_host_transition_timing.sql";
 const VALIDATOR = fileURLToPath(
   new URL("../../supabase/validate_event_controller_database.sql", import.meta.url),
 );
@@ -49,7 +50,7 @@ describe("the complete migration history", () => {
     // first failure, so reaching this point is the assertion. Named explicitly
     // because it is the check that guards against an unrunnable migration.
     const files = migrationFiles();
-    expect(files.at(-1)).toBe(LOGIN_NAME_SLUG_MIGRATION);
+    expect(files.at(-1)).toBe(HOST_TRANSITION_MIGRATION);
     expect(files).toEqual([...files].sort());
 
     const tables = await rows<{ table_name: string }>(
@@ -86,7 +87,7 @@ describe("the complete migration history", () => {
       create schema if not exists supabase_migrations;
       create table if not exists supabase_migrations.schema_migrations (version text primary key);
       insert into supabase_migrations.schema_migrations (version)
-      values ('20260801040000') on conflict do nothing;
+      values ('20260906000000') on conflict do nothing;
     `);
     const report = await rows<{ area: string; status: string; details: string }>(
       db,
@@ -144,6 +145,7 @@ describe("teams are gone from the final schema", () => {
     expect(eventColumns.map((row) => row.column_name)).toEqual([
       "created_at",
       "event_date",
+      "host_transition_seconds",
       "id",
       "name",
       "status",
@@ -351,6 +353,7 @@ describe("existing-row safety", () => {
       LOGIN_NAME_MIGRATION,
       REUSABLE_INVITE_MIGRATION,
       LOGIN_NAME_SLUG_MIGRATION,
+      HOST_TRANSITION_MIGRATION,
     ].includes(name))) {
       await legacy.exec(readMigration(file));
     }
@@ -404,6 +407,7 @@ describe("existing-row safety", () => {
       LOGIN_NAME_MIGRATION,
       REUSABLE_INVITE_MIGRATION,
       LOGIN_NAME_SLUG_MIGRATION,
+      HOST_TRANSITION_MIGRATION,
     ].includes(name))) {
       await legacy.exec(readMigration(file));
     }
@@ -446,6 +450,7 @@ describe("controller event functions", () => {
       status: "draft",
       viewerToken,
       zoomToken: null,
+      hostTransitionSeconds: 0,
       agenda: [
         {
           id: agendaId,
@@ -591,6 +596,26 @@ describe("controller event functions", () => {
     );
     // The newer write survived; the stale one changed nothing.
     expect(stored?.name).toBe("Renamed");
+  });
+
+  it("stores host transition time and returns it to the controller", async () => {
+    const { document } = await create("summit-transitions");
+    const updated = await one<{ result: Record<string, unknown> }>(
+      db,
+      `select public.replace_controller_event($1, $2, $3::jsonb) as result`,
+      [document.id, 0, JSON.stringify({ ...document, hostTransitionSeconds: 90 })],
+    );
+
+    expect(updated?.result.status).toBe("updated");
+    const payload = updated?.result.payload as Record<string, Record<string, unknown>>;
+    expect(payload.event.hostTransitionSeconds).toBe(90);
+
+    const stored = await one<{ host_transition_seconds: number }>(
+      db,
+      `select host_transition_seconds from public.events where id = $1`,
+      [document.id],
+    );
+    expect(stored?.host_transition_seconds).toBe(90);
   });
 
   it("stores negative remaining seconds so overtime survives a save", async () => {

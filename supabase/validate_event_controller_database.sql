@@ -2,7 +2,7 @@
  * Timer database validator
  *
  * Run this entire file in Supabase Dashboard -> SQL Editor after applying
- * 20260801040000_slug_event_login_names.sql.
+ * 20260906000000_add_host_transition_timing.sql.
  *
  * READ-ONLY: this script creates, changes, and deletes nothing. It returns one
  * result table. The SUMMARY row must be PASS and every other row should be PASS.
@@ -44,6 +44,7 @@ expected_columns(table_name, column_name, data_type, udt_name, is_nullable) as (
     ('events', 'id', 'uuid', 'uuid', 'NO'),
     ('events', 'name', 'text', 'text', 'NO'),
     ('events', 'event_date', 'date', 'date', 'NO'),
+    ('events', 'host_transition_seconds', 'integer', 'int4', 'NO'),
     ('events', 'status', 'USER-DEFINED', 'event_status', 'NO'),
     ('events', 'viewer_token', 'uuid', 'uuid', 'NO'),
     ('events', 'created_at', 'timestamp with time zone', 'timestamptz', 'NO'),
@@ -251,10 +252,10 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
     exists (
       select 1
       from supabase_migrations.schema_migrations
-      where version = '20260801040000'
+      where version = '20260906000000'
     ),
     'FAIL',
-    'Expected version 20260801040000 in supabase_migrations.schema_migrations'
+    'Expected version 20260906000000 in supabase_migrations.schema_migrations'
 
   union all
   select
@@ -644,13 +645,14 @@ checks(sort_key, area, check_name, ok, failure_status, details) as (
       select 1 from public.events e
       join public.event_access a on a.event_id = e.id
       where e.version < 0
+         or e.host_transition_seconds not between 0 and 3600
          or (e.zoom_token is not null and e.zoom_token <> upper(e.zoom_token))
          or a.login_name <> public.event_access_key(a.login_name)
          or a.password_version < 1
          or a.password_hash not like 'scrypt$%'
     ),
     'FAIL',
-    'Versions must be nonnegative; Zoom codes uppercase; credentials must match their required formats'
+    'Versions and transition allowances must be valid; Zoom codes uppercase; credentials must match their required formats'
 
   union all
   select

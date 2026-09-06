@@ -13,6 +13,7 @@ import type { TimerEvent } from "@/lib/types";
  */
 
 const MAX_DURATION_SECONDS = 86_400;
+const MAX_HOST_TRANSITION_SECONDS = 3_600;
 /* `events.name` and `agenda_items.host` are both CHECK-constrained to 120. */
 const MAX_NAME_LENGTH = 120;
 const MAX_HOST_LENGTH = 120;
@@ -78,6 +79,7 @@ export const eventPayloadSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
   status: z.enum(["draft", "live", "completed"]),
   viewerToken: z.uuid(),
+  hostTransitionSeconds: z.number().int().min(0).max(MAX_HOST_TRANSITION_SECONDS).optional(),
   // Matches the char_length(8..64) CHECK on events.zoom_token.
   zoomToken: z.string().regex(/^[0-9A-Z]{8,64}$/).nullish(),
   agenda: z.array(agendaItemSchema).min(1).max(500),
@@ -108,6 +110,7 @@ export function toDatabaseEvent(event: EventPayload) {
     date: event.date,
     status: event.status,
     viewerToken: event.viewerToken,
+    hostTransitionSeconds: event.hostTransitionSeconds ?? 0,
     zoomToken: event.zoomToken ?? null,
     agenda: event.agenda.map((item) => ({
       id: item.id,
@@ -148,6 +151,7 @@ export function toTimerEvent(event: EventPayload): TimerEvent {
     date: event.date,
     status: event.status,
     viewerToken: event.viewerToken,
+    hostTransitionSeconds: event.hostTransitionSeconds ?? 0,
     zoomToken: event.zoomToken ?? undefined,
     agenda: event.agenda.map((item) => ({
       id: item.id,

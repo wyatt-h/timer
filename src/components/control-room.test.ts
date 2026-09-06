@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   panelTimerTogglePatch,
   panelistTimingIsLocked,
+  remainingHostTransitionSeconds,
   speakerPatchForItem,
   speakerTimerTogglePatch,
 } from "@/components/control-room";
@@ -87,6 +88,35 @@ describe("coupled panel timers", () => {
 });
 
 describe("live agenda editing", () => {
+  it("counts host transitions between agenda items, not between panelists", () => {
+    const opening: AgendaItem = {
+      id: "opening",
+      kind: "single",
+      durationSeconds: 600,
+      speakers: [{ id: "speaker-1", name: "Opening", durationSeconds: 600 }],
+    };
+    const panel: AgendaItem = {
+      id: "panel",
+      kind: "panel",
+      durationSeconds: 1200,
+      speakers: [
+        { id: "panelist-1", name: "One", durationSeconds: 300 },
+        { id: "panelist-2", name: "Two", durationSeconds: 300 },
+      ],
+    };
+    const closing: AgendaItem = {
+      id: "closing",
+      kind: "single",
+      durationSeconds: 600,
+      speakers: [{ id: "speaker-2", name: "Closing", durationSeconds: 600 }],
+    };
+    const agenda = [opening, panel, closing];
+
+    expect(remainingHostTransitionSeconds(agenda, opening.id, 90)).toBe(180);
+    expect(remainingHostTransitionSeconds(agenda, panel.id, 90)).toBe(90);
+    expect(remainingHostTransitionSeconds(agenda, closing.id, 90)).toBe(0);
+  });
+
   it("locks timing for completed and currently speaking panelists", () => {
     expect(panelistTimingIsLocked(0, 1)).toBe(true);
     expect(panelistTimingIsLocked(1, 1)).toBe(true);
