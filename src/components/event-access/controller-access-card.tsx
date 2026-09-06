@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAppLanguage } from "@/components/language-provider";
 import {
   changeControllerPassword,
   createEventInvite,
@@ -22,6 +23,7 @@ import {
   type EventInvite,
 } from "@/lib/event-auth/client";
 import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/event-auth/password-rules";
+import type { AppLanguage } from "@/lib/i18n";
 
 /*
  * What an operator can do to an event itself from inside the control room: leave
@@ -37,19 +39,40 @@ import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/event-auth/password-
  * the same database transaction.
  */
 
-type Panel = "none" | "password" | "invite";
+type Panel = "none" | "share" | "password" | "invite";
+
+export function formatEventLoginMessage({
+  eventName,
+  eventUrl,
+  loginName,
+  password,
+  language,
+}: {
+  eventName: string;
+  eventUrl: string;
+  loginName: string;
+  password: string;
+  language: AppLanguage;
+}) {
+  return language === "zh"
+    ? `“${eventName}”的 Timer 登录信息：请打开 ${eventUrl}，使用登录名“${loginName}”和密码“${password}”。`
+    : `Timer login details for “${eventName}”: open ${eventUrl} and use login name “${loginName}” with password “${password}”.`;
+}
 
 export function ControllerAccessCard({
   eventId,
+  eventName,
   loginName,
   onSignOut,
   onDelete,
 }: {
   eventId: string;
+  eventName: string;
   loginName: string;
   onSignOut: () => void;
   onDelete: () => void;
 }) {
+  const { language } = useAppLanguage();
   const [panel, setPanel] = useState<Panel>("none");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -112,6 +135,30 @@ export function ControllerAccessCard({
     window.setTimeout(() => setCopied(false), 2400);
   }
 
+  async function copyLoginDetails() {
+    if (!currentPassword) return;
+    setError("");
+    const eventUrl = new URL(`/events/${eventId}`, window.location.origin).toString();
+    const message = formatEventLoginMessage({
+      eventName,
+      eventUrl,
+      loginName,
+      password: currentPassword,
+      language,
+    });
+    try {
+      await navigator.clipboard.writeText(message);
+    } catch {
+      setError("This browser could not copy the login details. Try again.");
+      return;
+    }
+    setCurrentPassword("");
+    setCopied(true);
+    setNotice("Login details copied. The password was not saved.");
+    window.setTimeout(() => setCopied(false), 2400);
+    window.setTimeout(() => setNotice(""), 6000);
+  }
+
   async function revokeInvite() {
     if (!invite) return;
     setBusy(true);
@@ -129,7 +176,12 @@ export function ControllerAccessCard({
   }
 
   return (
-    <details className="group rounded-field border border-line bg-surface-raised">
+    <details
+      className="group rounded-field border border-line bg-surface-raised"
+      onToggle={(event) => {
+        if (!event.currentTarget.open) reset();
+      }}
+    >
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-2.5 marker:content-none">
         <span className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
           <ShieldCheck size={12} aria-hidden />
@@ -156,7 +208,40 @@ export function ControllerAccessCard({
         )}
       </div>
 
-      {panel === "invite" && invite ? (
+      {panel === "share" ? (
+        <div className="grid gap-2.5">
+          <p className="text-[12px] leading-relaxed text-text-muted">
+            Enter the current event password to create a ready-to-send message. Timer uses it only
+            for copying and does not save it.
+          </p>
+          <Input
+            id="share-event-password"
+            label="Event password"
+            type="password"
+            value={currentPassword}
+            required
+            autoComplete="current-password"
+            onValueChange={(value) => {
+              setCurrentPassword(value);
+              setCopied(false);
+            }}
+          />
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!currentPassword}
+              onClick={() => void copyLoginDetails()}
+            >
+              {copied ? <Check size={13} aria-hidden /> : <Copy size={13} aria-hidden />}
+              {copied ? "Copied" : "Copy message"}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={reset}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : panel === "invite" && invite ? (
         <div className="grid gap-3">
           <p className="text-[12px] leading-relaxed text-text-muted">
             This link can be used multiple times for 24 hours. Creating another invitation
@@ -214,6 +299,19 @@ export function ControllerAccessCard({
         </div>
       ) : (
         <div className="grid gap-1.5">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setError("");
+              setNotice("");
+              setCopied(false);
+              setPanel("share");
+            }}
+          >
+            <Copy size={13} aria-hidden />
+            Copy login details
+          </Button>
           <Button variant="secondary" size="sm" disabled={busy} onClick={() => void makeInvite()}>
             <Link2 size={13} aria-hidden />
             {busy ? "Creating invitation…" : "Create invitation link"}

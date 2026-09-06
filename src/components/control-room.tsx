@@ -1643,6 +1643,7 @@ export function LiveConsole({
 
           <ControllerAccessCard
             eventId={event.id}
+            eventName={event.name}
             loginName={loginName}
             onSignOut={() => {
               setAccessError("");

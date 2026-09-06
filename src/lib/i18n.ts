@@ -293,6 +293,12 @@ const zh = {
   "Invitation revoked. The link can no longer be used.": "邀请已撤销，此链接无法再使用。",
   "Event access": "活动访问",
   "Login name:": "登录名：",
+  "Copy login details": "复制登录信息",
+  "Enter the current event password to create a ready-to-send message. Timer uses it only for copying and does not save it.":
+    "输入当前活动密码来生成可直接发送的消息。密码仅用于复制，Timer 不会保存。",
+  "Copy message": "复制消息",
+  "Login details copied. The password was not saved.": "登录信息已复制，密码未被保存。",
+  "This browser could not copy the login details. Try again.": "此浏览器无法复制登录信息，请重试。",
   "This link can be used multiple times for 24 hours. Creating another invitation revokes this one.":
     "此链接可在 24 小时内重复使用。创建新邀请会撤销当前邀请。",
   Copied: "已复制",

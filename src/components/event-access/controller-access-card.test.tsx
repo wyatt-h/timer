@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ControllerAccessCard } from "@/components/event-access/controller-access-card";
+import {
+  ControllerAccessCard,
+  formatEventLoginMessage,
+} from "@/components/event-access/controller-access-card";
 
 const accessMocks = vi.hoisted(() => ({
   changeControllerPassword: vi.fn(),
@@ -37,6 +40,7 @@ describe("ControllerAccessCard", () => {
     render(
       <ControllerAccessCard
         eventId="7ee15526-144a-46a4-abab-a49d23c61541"
+        eventName="Friday Night"
         loginName="friday-night"
         onSignOut={vi.fn()}
         onDelete={vi.fn()}
@@ -57,5 +61,47 @@ describe("ControllerAccessCard", () => {
         "https://timer.example/invite#share-token",
       ),
     );
+  });
+
+  it("formats the shareable message in Chinese", () => {
+    expect(
+      formatEventLoginMessage({
+        eventName: "全球电话会议",
+        eventUrl: "https://timer.example/events/event-id",
+        loginName: "globalcall0824",
+        password: "globalcall0824",
+        language: "zh",
+      }),
+    ).toBe(
+      "“全球电话会议”的 Timer 登录信息：请打开 https://timer.example/events/event-id，使用登录名“globalcall0824”和密码“globalcall0824”。",
+    );
+  });
+
+  it("copies a ready-to-send login message without saving the password", async () => {
+    render(
+      <ControllerAccessCard
+        eventId="7ee15526-144a-46a4-abab-a49d23c61541"
+        eventName="Friday Night"
+        loginName="friday-night"
+        onSignOut={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Event access"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy login details" }));
+
+    const password = screen.getByLabelText("Event password") as HTMLElement & { value: string };
+    password.value = "friday-night";
+    fireEvent.input(password);
+    fireEvent.click(screen.getByRole("button", { name: "Copy message" }));
+
+    await waitFor(() =>
+      expect(accessMocks.writeText).toHaveBeenCalledWith(
+        "Timer login details for “Friday Night”: open http://localhost:3000/events/7ee15526-144a-46a4-abab-a49d23c61541 and use login name “friday-night” with password “friday-night”.",
+      ),
+    );
+    expect(password.value).toBe("");
+    expect(screen.getByText("Login details copied. The password was not saved.")).toBeInTheDocument();
   });
 });
