@@ -269,7 +269,7 @@ export function EventEditor() {
   if (!isEditing && draft) {
     return (
       <main className="min-h-svh bg-paper" id="main">
-        <AppHeader />
+        <AppHeader helpContext="create" />
         <div className="mx-auto w-[min(560px,calc(100%-2.5rem))] pt-12 pb-24">
           <Card className="grid gap-5 p-5">
               <div>
@@ -314,6 +314,7 @@ export function EventEditor() {
               <Button
                 type="button"
                 variant="primary"
+                data-help="create-event"
                 disabled={creating}
                 onClick={() => void createEvent()}
               >
@@ -364,7 +365,7 @@ export function EventEditor() {
     }
     return (
       <main className="min-h-svh bg-paper" id="main">
-        <AppHeader />
+        <AppHeader helpContext="editor" />
         <div
           className="mx-auto grid w-[min(1040px,calc(100%-2.5rem))] gap-5 pt-9"
           aria-busy="true"
@@ -382,7 +383,7 @@ export function EventEditor() {
 
   return (
     <main className="min-h-svh bg-paper" id="main">
-      <AppHeader />
+      <AppHeader helpContext="editor" />
 
       <div className="mx-auto w-[min(1040px,calc(100%-2.5rem))] pt-9 pb-24">
         <div className="mb-8 flex flex-wrap items-start justify-between gap-5">
@@ -410,11 +411,11 @@ export function EventEditor() {
                   Unsaved changes
                 </span>
               )}
-              <Button variant="secondary" disabled={creating} onClick={() => save(false)}>
+              <Button data-help="editor-save" variant="secondary" disabled={creating} onClick={() => save(false)}>
                 Save changes
               </Button>
             </div>
-            <Button variant="primary" disabled={creating} onClick={handlePrimaryAction}>
+            <Button data-help="editor-start" variant="primary" disabled={creating} onClick={handlePrimaryAction}>
               {creating
                 ? "Creating…"
                 : draft.status === "live"
@@ -430,7 +431,7 @@ export function EventEditor() {
             * agenda on smaller screens. The desktop grid moves this card to
             * the right without changing that reading order.
             */}
-          <aside className="lg:sticky lg:top-24 lg:col-start-2 lg:row-start-1">
+          <aside data-help="event-details" className="lg:sticky lg:top-24 lg:col-start-2 lg:row-start-1">
             <Card className="p-5">
               <h2 className="text-[18px] font-semibold tracking-[-0.025em]">Event details</h2>
 

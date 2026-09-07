@@ -177,6 +177,7 @@ export function ControllerAccessCard({
 
   return (
     <details
+      data-help="event-access"
       className="group rounded-field border border-line bg-surface-raised"
       onToggle={(event) => {
         if (!event.currentTarget.open) reset();

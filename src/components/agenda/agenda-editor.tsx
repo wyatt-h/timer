@@ -169,7 +169,7 @@ export function AgendaEditor({
               </p>
             </div>
             <div className="mt-1 flex flex-wrap justify-center gap-2">
-              <Button type="button" variant="primary" onClick={() => addItem(makeSpeakerItem())}>
+              <Button type="button" variant="primary" data-help="agenda-add" onClick={() => addItem(makeSpeakerItem())}>
                 <Mic className="size-4" aria-hidden />
                 Add speaker
               </Button>
@@ -334,7 +334,7 @@ export function AgendaEditor({
               type="button"
               variant="dashed"
               className="flex-1"
-              onClick={() => addItem(makeSpeakerItem())}
+              data-help="agenda-add" onClick={() => addItem(makeSpeakerItem())}
             >
               <Plus className="size-4" aria-hidden />
               Add speaker

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { BookOpen, House } from "lucide-react";
+import { ContextHelp } from "@/components/context-help";
+import type { HelpContext } from "@/lib/guide";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 
@@ -9,7 +11,7 @@ import { Button } from "@/components/ui/button";
  * There is no team and no workspace to name, so the header carries only the mark
  * and a way home. An event is reached by its own address and its own credentials.
  */
-export function AppHeader() {
+export function AppHeader({ helpContext }: { helpContext?: HelpContext } = {}) {
   return (
     <>
       {/*
@@ -23,11 +25,12 @@ export function AppHeader() {
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-line bg-[rgba(250,250,251,0.84)] px-5 backdrop-blur-xl backdrop-saturate-150 sm:px-8 lg:px-14">
+      <header className="sticky top-0 z-20 flex min-h-[72px] flex-wrap items-center justify-between gap-2 py-3 border-b border-line bg-[rgba(250,250,251,0.84)] px-5 backdrop-blur-xl backdrop-saturate-150 sm:px-8 lg:px-14">
         <Link href="/" aria-label="Timer home">
           <BrandMark />
         </Link>
         <div className="flex items-center gap-1">
+          {helpContext && <ContextHelp context={helpContext} />}
           <Button asChild variant="ghost" size="sm">
             <Link href="/guide">
               <BookOpen size={15} aria-hidden />

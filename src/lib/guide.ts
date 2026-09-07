@@ -1,0 +1,80 @@
+export type HelpContext = "home" | "create" | "editor" | "control" | "zoom";
+
+export const lessons = [
+  { id: "create", title: "Create an event", label: "01 · Get started", description: "Start from scratch or bring a whole programme in from CSV.", minutes: "3 min", image: "create", steps: [
+    ["Start from the home screen", "Choose Create an event, then New event. No personal account is needed: each event has its own access."],
+    ["Choose event access", "Enter a unique lowercase login name and a password of at least six characters. Select Create event. After the event is created, its agenda editor opens."],
+    ["Add the details and agenda", "Give the event its display name and date. Add speakers or panels, set their durations, then select Save changes. Start event opens the control room; Start timer begins the countdown."],
+    ["Or import from CSV", "On the home screen, choose Import from CSV and download the template. Use one row per speaker. Rows with the same event_name form one event; item_order groups panelists into one agenda item. Preview the file, then set a distinct login name for each event and a shared password for the import."],
+    ["Return on another device", "Choose Open an event and enter its login name and password, or follow a controller invitation. On this device lists events this browser remembers; it is not a directory of all events."],
+  ] },
+  { id: "build", title: "Build the agenda", label: "02 · Prepare", description: "Arrange speakers, panelists, durations, and the order of the show.", minutes: "4 min", image: "build", steps: [
+    ["Add a speaker", "In the agenda editor, select Add speaker and enter the speaker’s name and duration. A single speaker’s duration is also that agenda item’s duration."],
+    ["Add a panel", "Select Add panel. Set its overall duration, host, default panelist duration, and individual panelists. The panel’s overall clock and each speaker’s clock are separate."],
+    ["Arrange the programme", "Drag a reorder handle to move an agenda item or panelist. In the builder, keyboard users can focus a handle, press Space, use arrow keys, then press Space to drop. Remove deletes the selected row from your draft."],
+    ["Save and open control", "Select Save changes to keep your edits. Start event, or Return to control for a live event, saves the editor changes and opens the control room."],
+    ["Edit during the show", "The control room lets you edit upcoming items. Select Save Changes to apply the draft, or Undo Changes to discard it. Resolve the draft before moving to another part. A conflict notice asks which version to keep if another controller has changed the event."],
+  ] },
+  { id: "run", title: "Run the event", label: "03 · Run the show", description: "Learn the timing controls with a working practice event.", minutes: "4 min", image: "control", steps: [
+    ["Start, pause, and resume", "Start timer begins the current speaker’s countdown. Pause timer holds the remaining time. Select Start timer again to resume. The timer can continue below zero into overtime; it automatically stops at 15 minutes overtime."],
+    ["Adjust or reset", "−1m and −15s remove time; +15s and +1m add time. A running timer keeps running. Reset current topic asks for confirmation, restores the allotted time, and pauses the speaker; on a panel it also restores the panel total."],
+    ["Move to another part", "Previous and Next part load that speaker with their allotted time, paused. In a panel, Next panelist changes the speaker while a running panel total continues. Skip the rest of the panel moves to the next agenda item."],
+    ["Control a panel", "Starting the speaker also starts a panel total that is not running. Pausing the speaker leaves the panel clock running. Pausing the panel also pauses a running speaker. Use the time adjustments beneath the clock you want to change."],
+    ["Watch the finish and save state", "Expand Projected finish to set a host transition allowance between agenda items. Focus mode hides the run of show. Watch the cloud save status: Offline is not a confirmed cloud save. Other screens need a connection to receive changes."],
+    ["Finish the event", "End event asks for confirmation and marks the event completed. Start event on a completed event returns to the first part, ready for you to start the timer."],
+  ] },
+  { id: "share", title: "Share the right access", label: "04 · Bring people in", description: "Choose a speaker display or give a colleague control.", minutes: "3 min", image: "share", steps: [
+    ["For a speaker or display", "In the control-room header, Speaker view opens the read-only display in a new tab. The copy icon beside it copies the speaker link. Anyone with this link can watch the timer without a password, but cannot control the event."],
+    ["For another controller", "Expand Event access and select Create invitation link. Copy the link and send it to the colleague who should operate the event. It is reusable for 24 hours and grants control without revealing the password."],
+    ["Manage invitation links", "Revoke stops future uses of the invitation. Creating a new invitation replaces the previous link. Revoking a link does not sign out people who already used it. Changing the event password ends other controller sessions."],
+    ["Or share login details", "In Event access, select Copy login details and enter the current password to prepare a message. It includes controller credentials, so share it only with people who should operate the event."],
+    ["Set up a speaker display", "On each display, select Enable & test sound to allow audio. The sound button and alarm picker affect that display. Use Fullscreen for a presentation display. Copying a link does not enable sound on the receiving device."],
+  ] },
+  { id: "zoom", title: "Connect to Zoom", label: "05 · Join the meeting", description: "Pair the event, then choose when the meeting sees its timer.", minutes: "3 min", image: "zoom", steps: [
+    ["Copy the event’s Zoom code", "Expand Zoom code in the control room and select its copy icon. If no code is present, select Create Zoom code first. Wait for the event’s cloud save to finish so the Zoom app can find it."],
+    ["Open Timer inside Zoom", "The operator needs the Timer Zoom App installed or made available by their Zoom administrator. Join a meeting and open Timer from Zoom Apps. Opening /zoom in an ordinary browser does not publish to a meeting."],
+    ["Connect the event", "Paste the code into Zoom code and select Connect. Confirm the event name. At this point the app is connected, but nothing is shared with the meeting."],
+    ["Publish the countdown", "Select Sync to Zoom. The indicator appears when the timer is running and follows timing changes from the control room. Participants can see the indicator without installing Timer themselves."],
+    ["Stop sharing or troubleshoot", "Select Stop sharing timer to remove the indicator, or Cancel sharing while waiting for the timer to start. If pairing fails, check the code and cloud connection. If publishing is unavailable, join a meeting in a supported Zoom client and re-check the app’s environment information."],
+  ] },
+] as const;
+
+export type LessonId = typeof lessons[number]["id"];
+
+export type HelpTopic = { label: string; description: string; context: HelpContext; target?: string; lesson: LessonId };
+export const helpTopics: HelpTopic[] = [
+  { label: "New event", context: "home", target: "new-event", lesson: "create", description: "Open the creation form. Choose event access first; then build the agenda." },
+  { label: "Import from CSV", context: "home", target: "import", lesson: "create", description: "Import one event or several. Download the template, preview your rows, then choose access for the imported events." },
+  { label: "Open an event / On this device", context: "home", lesson: "create", description: "Use the event login name and password, or choose an event this browser remembers." },
+  { label: "Create event", context: "create", target: "create-event", lesson: "create", description: "Creates the event with the login name and password you chose, then opens the agenda editor." },
+  { label: "Event details", context: "editor", target: "event-details", lesson: "build", description: "Change the visible event name and date. Changing the name does not change its login name." },
+  { label: "Add speaker / Add panel", context: "editor", target: "agenda-add", lesson: "build", description: "Add a single timed speaker or a panel with its own overall duration and individual panelists." },
+  { label: "Reorder / Remove / Add panelist", context: "editor", lesson: "build", description: "Drag a handle to reorder. In the builder, use Space and arrows from a focused handle. Remove deletes a draft row; Add panelist inserts a person in a panel." },
+  { label: "Save changes", context: "editor", target: "editor-save", lesson: "build", description: "Save the edited details and agenda. Check the save status for confirmation." },
+  { label: "Start event / Return to control", context: "editor", target: "editor-start", lesson: "run", description: "Save the editor changes and open control. Use Start timer there to begin the countdown." },
+  { label: "Start timer / Pause timer / Start speaker / Pause speaker", context: "control", target: "timer-toggle", lesson: "run", description: "Start or pause the current speaker. For a panel, starting the speaker also starts a stopped panel clock; pausing the speaker leaves the panel total running." },
+  { label: "−1m / −15s / +15s / +1m", context: "control", target: "timer-adjust", lesson: "run", description: "Change remaining time by the amount shown. On a panel, use the adjustment row under the speaker or panel clock you want to change." },
+  { label: "Start panel / Pause panel", context: "control", target: "panel-toggle", lesson: "run", description: "Control the overall panel clock. Pausing the panel also pauses a running speaker. Available only during a panel." },
+  { label: "Reset current topic", context: "control", target: "timer-reset", lesson: "run", description: "After confirmation, restore the allotted speaker time and pause it. On a panel, also restore the overall panel time." },
+  { label: "Previous / Next part / Next panelist", context: "control", target: "timer-next", lesson: "run", description: "Move to another speaker, paused at their allotted time. A running total continues when moving within the same panel. Save or undo upcoming edits first." },
+  { label: "Skip the rest of the panel", context: "control", target: "panel-skip", lesson: "run", description: "Move directly to the next agenda item. Available when a panel has another item after it." },
+  { label: "Projected finish / Host transition", context: "control", target: "projected-finish", lesson: "run", description: "See the estimated finish. Expand to add a planning allowance between agenda items, not between panelists. This is not a separate countdown." },
+  { label: "Focus mode", context: "control", target: "focus", lesson: "run", description: "Hide the run of show to concentrate on timing. Press again to show it. This does not pause the event." },
+  { label: "Edit", context: "control", target: "edit", lesson: "build", description: "Open the full event editor. In the control room, upcoming edits use Save Changes or Undo Changes before you move to another part." },
+  { label: "Go to / On now", context: "control", target: "agenda-workspace", lesson: "run", description: "Go to loads that panelist paused. On now identifies the active person and is not an action. Resolve any upcoming draft before jumping." },
+  { label: "Default panelist duration / Apply to all", context: "control", target: "agenda-workspace", lesson: "build", description: "For an upcoming panel, choose the default duration and Apply to all to update its panelists in the draft. Select Save Changes to apply it." },
+  { label: "Save Changes / Undo Changes", context: "control", target: "agenda-workspace", lesson: "build", description: "Apply or discard the upcoming-agenda draft. These buttons appear when the draft has changed. Show the run of show if Focus mode has hidden it." },
+  { label: "Speaker view / Copy speaker link", context: "control", target: "speaker-view", lesson: "share", description: "Open a read-only display or copy its anonymous link. Recipients can see the countdown but cannot operate the event." },
+  { label: "Zoom code / Copy / Create Zoom code", context: "control", target: "zoom-code", lesson: "zoom", description: "Copy the pairing code for Timer inside Zoom. Create it first if absent. Copying the code does not publish anything to a meeting." },
+  { label: "Event access / Create invitation link", context: "control", target: "event-access", lesson: "share", description: "Create a reusable 24-hour controller invitation. It grants event control. A new link replaces the previous one." },
+  { label: "Copy login details / Revoke", context: "control", target: "event-access", lesson: "share", description: "Copy login details prepares a message containing controller credentials. Revoke stops new uses of the active invitation; existing controller sessions remain." },
+  { label: "Change the password / Sign out / Delete", context: "control", target: "event-access", lesson: "share", description: "A password change ends other sessions. Sign out ends this device’s session for this event. Delete removes the event for everyone after confirmation." },
+  { label: "End event / Start event", context: "control", target: "event-end", lesson: "run", description: "End event marks it completed after confirmation. Start event on a completed event returns to the first part, ready to start its timer." },
+  { label: "Save status / Retry / Conflict choices", context: "control", lesson: "run", description: "Offline and pending changes are not cloud confirmation. Retry a failed save. On conflict, Use the other version discards your local edit; Keep my changes saves it over the current server version." },
+  { label: "Zoom code / Connect / Disconnect", context: "zoom", target: "zoom-connect", lesson: "zoom", description: "Connect pairs the app with the code’s event. Disconnect leaves that event. Pairing alone does not publish an indicator." },
+  { label: "Sync to Zoom / Stop sharing timer", context: "zoom", target: "zoom-publish", lesson: "zoom", description: "Opt in to publishing the running countdown, or remove it from the meeting. Cancel sharing cancels the wait for a timer to start." },
+  { label: "Re-check Zoom / Read Zoom state", context: "zoom", lesson: "zoom", description: "Inspect the app’s Zoom context and indicator status if publishing is unavailable. The app must run inside a supported meeting context." },
+  { label: "Fullscreen / Exit fullscreen", context: "control", lesson: "share", description: "On the speaker display, expand to fill the screen or return to the browser window." },
+  { label: "Enable & test sound / Sound on", context: "control", lesson: "share", description: "On each speaker display, enable and test audio with a click. Sound on turns audio off on that display." },
+  { label: "Choose alarm sound / Preview", context: "control", lesson: "share", description: "On the speaker display, choose an alarm preset or preview its sound. This preference is local to that display." },
+];

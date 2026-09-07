@@ -290,3 +290,14 @@
     display: flex;
   }
 }
+
+/* Help never blocks controls or starts a tour during a live event. */
+[data-help-highlight="true"], [data-practice-highlight="true"] {
+  outline: 3px solid var(--color-violet, #7757ed);
+  outline-offset: 5px;
+  scroll-margin-block: 160px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-help-highlight="true"] { animation: help-reveal 320ms ease-out; }
+  @keyframes help-reveal { from { outline-offset: 10px; } to { outline-offset: 5px; } }
+}

@@ -4,6 +4,7 @@ import { ArrowRight, BookOpen, Clock3, FileUp, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ContextHelp } from "@/components/context-help";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { ImportDialog } from "@/components/import-dialog";
@@ -69,15 +70,16 @@ export default function Home() {
         className="pointer-events-none absolute -top-[22vw] -right-[16vw] -z-10 size-[46vw] rounded-full bg-[radial-gradient(circle,rgba(159,134,255,0.2),transparent_68%)] blur-[14px]"
       />
 
-      <nav className="flex h-[88px] w-full items-center justify-between" aria-label="Main navigation">
+      <nav className="flex min-h-[88px] w-full flex-wrap items-center justify-between gap-2 py-3" aria-label="Main navigation">
         <BrandMark />
+        <div className="flex items-center gap-2"><ContextHelp context="home" />
         <Link
           href="/guide"
           className="inline-flex h-9 items-center gap-2 rounded-full px-3 text-[12px] font-semibold text-text-muted transition-colors hover:bg-white/70 hover:text-violet-dark"
         >
           <BookOpen size={14} aria-hidden />
-          How it works
-        </Link>
+          Learn Timer
+        </Link></div>
       </nav>
 
       <section className="mx-auto flex w-[min(100%,620px)] flex-1 flex-col items-center justify-center pt-10 pb-18 text-center">
@@ -115,17 +117,16 @@ export default function Home() {
           {mode === "create" ? (
             <div className="grid gap-3 rounded-[22px] border border-ink/8 bg-white/80 p-[18px] text-left shadow-[0_22px_70px_rgba(31,26,50,0.08),inset_0_1px_rgba(255,255,255,0.9)] backdrop-blur-2xl">
               <p className="text-[13px] leading-relaxed text-text-muted">
-                Build the run of show, then choose a password for the event
-                itself. No account, and nothing to sign up for.
+                Choose access for the event, then build its run of show. No account, and nothing to sign up for.
               </p>
               <Button asChild variant="primary">
-                <Link href="/events/new">
+                <Link data-help="new-event" href="/events/new">
                   <Plus size={16} aria-hidden />
                   New event
                   <ArrowRight size={16} aria-hidden />
                 </Link>
               </Button>
-              <Button variant="secondary" onClick={() => setImporting(true)}>
+              <Button data-help="import" variant="secondary" onClick={() => setImporting(true)}>
                 <FileUp size={14} aria-hidden />
                 Import from CSV
               </Button>

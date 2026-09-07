@@ -13,6 +13,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ContextHelp } from "@/components/context-help";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,6 +81,7 @@ function Card({
 }) {
   return (
     <section
+      data-help={title === "Meeting indicator" ? "zoom-publish" : title === "Timer" ? "zoom-connect" : undefined}
       className={cn(
         "grid gap-2.5 rounded-card border border-line bg-white p-4",
         tone === "live" && "border-success/30 bg-success-soft",
@@ -202,8 +204,9 @@ export function ZoomTimer() {
   return (
     <main className="min-h-svh bg-paper px-3.5 py-4">
       <div className="mx-auto grid w-[min(460px,100%)] gap-3">
-        <header className="flex items-center justify-between gap-3">
+        <header className="flex flex-wrap items-center justify-between gap-3">
           <BrandMark />
+          <ContextHelp context="zoom" />
           <h1 className="sr-only">Timer for Zoom</h1>
           <span
             className={cn(

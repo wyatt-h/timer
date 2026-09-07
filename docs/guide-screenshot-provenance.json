@@ -1,0 +1,72 @@
+{
+  "capturedOn": "2026-09-06",
+  "source": "Actual Timer pages in a local production build; sample event data only.",
+  "processing": "Original browser screenshot bytes. No image editing or re-encoding. HTML annotations are separate.",
+  "zoom": "Browser preview only; not an in-meeting screenshot.",
+  "assets": [
+    {
+      "file": "public/guide/control.jpg",
+      "format": "jpeg",
+      "width": 1280,
+      "height": 868,
+      "bytes": 81189,
+      "sha256": "d336455c08a7b393093239eb50798eb94afe276a27d590f31061e50a1369ff4c"
+    },
+    {
+      "file": "public/guide/create.jpg",
+      "format": "jpeg",
+      "width": 1280,
+      "height": 1061,
+      "bytes": 73003,
+      "sha256": "3f9d3e7b4ece6e1b0452d044bbf3039097c8705ed41a97a004fa120f4d840e07"
+    },
+    {
+      "file": "public/guide/editor.jpg",
+      "format": "jpeg",
+      "width": 1280,
+      "height": 1173,
+      "bytes": 76463,
+      "sha256": "cabcf2cf1b402e437dcb6ac922f7dec840f8dfcbd724dfd0a44c61eef5029d22"
+    },
+    {
+      "file": "public/guide/home.jpg",
+      "format": "jpeg",
+      "width": 1280,
+      "height": 725,
+      "bytes": 44370,
+      "sha256": "cacb928065b1627736cd56bb4cbbbe02c68a5381719e26158e7dd6eccede58a5"
+    },
+    {
+      "file": "public/guide/import.jpg",
+      "format": "jpeg",
+      "width": 1280,
+      "height": 720,
+      "bytes": 65377,
+      "sha256": "1b468ff734cd1887163ee539ac5cec10e10707f3edb9fe6dfb2ba91611474d96"
+    },
+    {
+      "file": "public/guide/panel.jpg",
+      "format": "jpeg",
+      "width": 1280,
+      "height": 1125,
+      "bytes": 92936,
+      "sha256": "e3fe813f69201a4ebb0fe5cd61a86324ba4121c0e7773b189ffe38457dd6560f"
+    },
+    {
+      "file": "public/guide/sharing.jpg",
+      "format": "jpeg",
+      "width": 1280,
+      "height": 1159,
+      "bytes": 95447,
+      "sha256": "ea1a678872bfc130731b66e5480d9c2c5b24bc221a282a327b7233cdb0732e03"
+    },
+    {
+      "file": "public/guide/zoom-browser.jpg",
+      "format": "jpeg",
+      "width": 1280,
+      "height": 934,
+      "bytes": 53345,
+      "sha256": "2e667855d2831149d8d44d78795b9c52ee76e5ce8d399278d3fcbfbe68cde8ec"
+    }
+  ]
+}

@@ -1,12 +1,8 @@
-import type { Metadata } from "next";
-import { ProductGuide } from "@/components/product-guide";
+import { LearningGuide } from "@/components/guide/learning-guide";
 
-export const metadata: Metadata = {
-  title: "How it works",
-  description:
-    "A guided tour of Timer: build an event, run the show, share a speaker view, and publish the countdown in Zoom.",
+export const metadata = {
+  title: "Learn Timer",
+  description: "Learn to create, run, share, and connect Timer events to Zoom with guided lessons and a working practice event.",
 };
 
-export default function GuidePage() {
-  return <ProductGuide />;
-}
+export default function GuidePage() { return <LearningGuide />; }

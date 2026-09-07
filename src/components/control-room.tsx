@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { ContextHelp } from "@/components/context-help";
 import { BrandMark } from "@/components/brand-mark";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DurationInput } from "@/components/duration-input";
@@ -313,6 +314,7 @@ export function ControlRoom() {
 }
 
 type LiveConsoleProps = {
+  practice?: { onOpenSpeaker: () => void; onEdit: () => void };
   event: TimerEvent;
   loginName: string;
   segments: TimerSegment[];
@@ -332,6 +334,7 @@ type LiveConsoleProps = {
 };
 
 export function LiveConsole({
+  practice,
   event,
   loginName,
   segments,
@@ -757,7 +760,7 @@ export function LiveConsole({
   }
 
   async function copyLink() {
-    await navigator.clipboard.writeText(`${window.location.origin}${viewerPath}`);
+    if (!practice) await navigator.clipboard.writeText(`${window.location.origin}${viewerPath}`);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2400);
   }
@@ -789,7 +792,7 @@ export function LiveConsole({
    */
   const runWorkspace = useMemo(
     () => (
-    <section className="min-h-[calc(100svh-7.875rem)] rounded-panel border border-line bg-white/95 p-5 shadow-[0_12px_34px_rgba(26,22,42,0.045)]">
+    <section data-help="agenda-workspace" className="min-h-[calc(100svh-7.875rem)] rounded-panel border border-line bg-white/95 p-5 shadow-[0_12px_34px_rgba(26,22,42,0.045)]">
       <div className="mb-4 flex items-center justify-between gap-5">
         <div>
           <h2 className="text-[24px] font-semibold tracking-[-0.045em]">Up next</h2>
@@ -1227,7 +1230,7 @@ export function LiveConsole({
         {announcement}
       </p>
       <p className="sr-only" role="status" aria-live="polite">
-        {copied ? "Speaker link copied to clipboard" : ""}
+        {copied ? (practice ? "Practice only: no public link was copied. Use Speaker view to preview the display." : "Speaker link copied to clipboard") : ""}
       </p>
 
       {blockedNavigationNotice && (
@@ -1247,9 +1250,9 @@ export function LiveConsole({
         * event pushed to the right so the title reads as the heading of the
         * controls that act on it rather than floating between them.
         */}
-      <header className="sticky top-0 z-30 -mx-3 mb-5 flex min-h-[76px] flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line bg-[rgba(248,248,250,0.9)] px-4 py-2.5 backdrop-blur-2xl backdrop-saturate-150 sm:-mx-5 sm:px-6">
+      <header style={practice ? { position: "static" } : undefined} className="sticky top-0 z-30 -mx-3 mb-5 flex min-h-[76px] flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line bg-[rgba(248,248,250,0.9)] px-4 py-2.5 backdrop-blur-2xl backdrop-saturate-150 sm:-mx-5 sm:px-6">
         <div className="flex shrink-0 items-center gap-2">
-          <Link className="inline-flex min-h-9 items-center gap-2 rounded-control px-3 text-[12px] font-semibold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" href="/">
+          <Link className="inline-flex min-h-9 items-center gap-2 rounded-control px-3 text-[12px] font-semibold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" href={practice ? "/guide" : "/"}>
             <ArrowLeft size={15} aria-hidden />
             Home
           </Link>
@@ -1260,9 +1263,11 @@ export function LiveConsole({
             {event.name}
           </h1>
           <LiveClock />
-          <SaveStatusBadge state={saveState} onRetry={onRetrySave} />
+          {practice ? <span className="rounded-full bg-violet-soft px-3 py-1 text-[12px] font-semibold text-violet-dark">Practice · local only</span> : <SaveStatusBadge state={saveState} onRetry={onRetrySave} />}
+          <ContextHelp context="control" />
           <button
             className="grid size-11 shrink-0 place-items-center rounded-control border border-line bg-white text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark aria-expanded:bg-violet-soft aria-expanded:text-violet-dark"
+            data-help="focus"
             onClick={() => setIsFocused((focused) => !focused)}
             aria-pressed={isFocused}
             aria-label={isFocused ? "Show the run of show" : "Focus on the timer"}
@@ -1270,7 +1275,7 @@ export function LiveConsole({
           >
             {isFocused ? <Columns2 size={15} /> : <Focus size={15} />}
           </button>
-          <Link className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line bg-white px-3 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover" href={`/events/${event.id}/edit`}>
+          <Link data-help="edit" onClick={practice ? (e) => { e.preventDefault(); practice.onEdit(); } : undefined} className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line bg-white px-3 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-hover" href={practice ? "/guide/build" : `/events/${event.id}/edit`}>
             <Pencil size={14} />
             Edit
           </Link>
@@ -1279,9 +1284,10 @@ export function LiveConsole({
             * speaker link, so they belong together rather than in a panel
             * at the far end of the sidebar.
             */}
-          <div className="inline-flex">
+          <div className="inline-flex" data-help="speaker-view">
             <Link
-              href={viewerPath}
+              onClick={practice ? (e) => { e.preventDefault(); practice.onOpenSpeaker(); } : undefined}
+              href={practice ? "/guide/share" : viewerPath}
               target="_blank"
               aria-label="Open speaker view"
               className="inline-flex min-h-11 items-center gap-2 rounded-l-control rounded-r-none border border-line bg-white px-3.5 text-[13px] font-semibold transition-colors duration-150 hover:bg-surface-hover"
@@ -1299,12 +1305,12 @@ export function LiveConsole({
             </button>
           </div>
           {isEnded ? (
-            <button className="inline-flex min-h-11 items-center gap-2 rounded-control bg-violet px-4 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark" onClick={startEvent}>
+            <button data-help="event-end" className="inline-flex min-h-11 items-center gap-2 rounded-control bg-violet px-4 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark" onClick={startEvent}>
               <Play size={13} fill="currentColor" />
               Start event
             </button>
           ) : (
-            <button className="inline-flex min-h-11 items-center gap-2 rounded-control bg-over px-4 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-[#b62d2d]" onClick={() => setConfirmingEnd(true)}>
+            <button className="inline-flex min-h-11 items-center gap-2 rounded-control bg-over px-4 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-[#b62d2d]" data-help="event-end" onClick={() => setConfirmingEnd(true)}>
               <Square size={11} fill="currentColor" />
               End event
             </button>
@@ -1423,7 +1429,7 @@ export function LiveConsole({
                   </p>
                 )}
                 <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
-                <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-violet text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark disabled:cursor-not-allowed disabled:opacity-45" onClick={toggleSpeakerTimer} disabled={speakerAutoStopped}>
+                <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-violet text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark disabled:cursor-not-allowed disabled:opacity-45" data-help="timer-toggle" onClick={toggleSpeakerTimer} disabled={speakerAutoStopped}>
                   {isRunning ? <Pause size={14} /> : <Play size={14} />}
                   {speakerAutoStopped ? "Auto-stopped" : isRunning ? "Pause speaker" : "Start speaker"}
                 </button>
@@ -1456,7 +1462,7 @@ export function LiveConsole({
                   </p>
                 )}
                 <TimerProgress label="Panel progress" ratio={panelProgress} tone={panelTone} />
-                <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-line bg-white text-[13px] font-semibold transition-colors duration-150 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45" onClick={togglePanelTimer} disabled={panelAutoStopped}>
+                <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-line bg-white text-[13px] font-semibold transition-colors duration-150 hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-45" data-help="panel-toggle" onClick={togglePanelTimer} disabled={panelAutoStopped}>
                   {isPanelRunning ? <Pause size={14} /> : <Play size={14} />}
                   {panelAutoStopped ? "Panel auto-stopped" : isPanelRunning ? "Pause panel" : "Start panel"}
                 </button>
@@ -1491,7 +1497,7 @@ export function LiveConsole({
                 </p>
               )}
               <TimerProgress label="Speaker progress" ratio={speakerProgress} tone={speakerTone} />
-              <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-violet text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark disabled:cursor-not-allowed disabled:opacity-45" onClick={toggleSpeakerTimer} disabled={speakerAutoStopped}>
+              <button className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-violet text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-violet-dark disabled:cursor-not-allowed disabled:opacity-45" data-help="timer-toggle" onClick={toggleSpeakerTimer} disabled={speakerAutoStopped}>
                 {isRunning ? <Pause size={14} /> : <Play size={14} />}
                 {speakerAutoStopped ? "Auto-stopped" : isRunning ? "Pause timer" : "Start timer"}
               </button>
@@ -1499,7 +1505,7 @@ export function LiveConsole({
           )}
 
           {!isPanel && (
-            <div className="grid grid-cols-4 gap-1.5">
+            <div data-help="timer-adjust" className="grid grid-cols-4 gap-1.5">
               <button className="grid min-h-9 place-items-center rounded-[8px] bg-surface-sunken text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark" onClick={() => adjust(-60)} title="Remove one minute">
                 −1m
               </button>
@@ -1518,13 +1524,14 @@ export function LiveConsole({
           <button
             type="button"
             className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-control border border-line bg-white px-3 text-[12px] font-semibold text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-violet-dark"
+            data-help="timer-reset"
             onClick={() => setConfirmingReset(true)}
           >
             <RotateCcw size={13} aria-hidden />
             Reset current topic
           </button>
 
-          <details className="group rounded-field border border-line bg-surface-raised">
+          <details data-help="projected-finish" className="group rounded-field border border-line bg-surface-raised">
             <summary className="grid min-h-[66px] cursor-pointer list-none grid-cols-[1fr_auto_auto] items-center gap-x-2.5 px-3.5 py-3 marker:content-none">
               <span className="text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
                 Projected finish
@@ -1591,6 +1598,7 @@ export function LiveConsole({
             </button>
             <button
               className="flex min-h-12 min-w-0 items-center justify-end gap-2 rounded-field border border-transparent bg-violet px-3 py-2 text-right text-white transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-[0_10px_24px_rgba(103,69,220,0.28)] disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:translate-y-0 aria-disabled:hover:shadow-none"
+              data-help="timer-next"
               disabled={!nextPart}
               aria-disabled={!nextPart || agendaDirty}
               onClick={() => {
@@ -1626,6 +1634,7 @@ export function LiveConsole({
                 }
                 handleJumpTo(nextItemSegmentIndex);
               }}
+              data-help="panel-skip"
               title={agendaDirty ? "Save or undo changes before moving" : "Skip the rest of this panel"}
             >
               <FastForward size={14} />
@@ -1643,7 +1652,7 @@ export function LiveConsole({
             * panel inside a meeting, where it publishes this event's speaker
             * countdown to every participant.
             */}
-          <details className="group rounded-field border border-line bg-surface-raised">
+          <details data-help="zoom-code" className="group rounded-field border border-line bg-surface-raised">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-2.5 marker:content-none">
               <span className="flex items-center gap-1.5 text-[12px] font-bold tracking-[0.07em] text-text-subtle uppercase">
                 <Video size={12} aria-hidden />
@@ -1656,7 +1665,7 @@ export function LiveConsole({
               />
             </summary>
             <div className="grid gap-2 border-t border-line-soft px-3.5 py-3">
-            {event.zoomToken ? (
+            {practice ? <p className="text-[13px] text-text-muted">Practice has no pairing code. <Link className="text-violet-dark underline" href="/guide/zoom">Try the Zoom connection lesson</Link>.</p> : event.zoomToken ? (
               <div className="flex items-center justify-between gap-2">
                 <strong className="tabular font-mono text-[15px] font-semibold tracking-[0.06em] text-ink">
                   {formatZoomToken(event.zoomToken)}
@@ -1691,7 +1700,7 @@ export function LiveConsole({
             </div>
           </details>
 
-          <ControllerAccessCard
+          {!practice && <ControllerAccessCard
             eventId={event.id}
             eventName={event.name}
             loginName={loginName}
@@ -1715,7 +1724,8 @@ export function LiveConsole({
               });
             }}
             onDelete={() => setConfirmingDelete(true)}
-          />
+          />}
+          {practice && <p data-help="event-access" className="rounded-field border border-line bg-white p-3 text-[13px] text-text-muted">This practice event stays in this tab. <Link className="text-violet-dark underline" href="/guide/share">Learn about sharing access</Link>.</p>}
 
           {isFocused && upcomingItems.length > 0 && (
             <div className="rounded-field border border-line bg-surface-raised px-3.5 py-3">
@@ -1799,7 +1809,7 @@ function TimeNudge({
   onAdjust: (seconds: number) => void;
 }) {
   return (
-    <div className="mt-2 grid grid-cols-4 gap-1" role="group" aria-label={label}>
+    <div data-help={label !== "Adjust the panel total" ? "timer-adjust" : undefined} className="mt-2 grid grid-cols-4 gap-1" role="group" aria-label={label}>
       <button className="grid min-h-8 place-items-center rounded-[7px] bg-white/75 text-[12px] font-bold text-text-muted transition-colors duration-150 hover:bg-white hover:text-violet-dark" onClick={() => onAdjust(-60)} aria-label="Remove one minute">
         −1m
       </button>
