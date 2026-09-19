@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AudienceDisplay } from "@/components/audience-display";
+import { LanguageProvider } from "@/components/language-provider";
 
 const audienceTestState = vi.hoisted(() => ({
   timerFinished: false,
@@ -89,6 +90,10 @@ describe("AudienceDisplay", () => {
     audienceTestState.play.mockResolvedValue(true);
     audienceTestState.unlock.mockResolvedValue(true);
     window.localStorage.clear();
+    Object.defineProperty(window, "documentPictureInPicture", {
+      configurable: true,
+      value: undefined,
+    });
     vi.clearAllMocks();
   });
 
@@ -178,6 +183,91 @@ describe("AudienceDisplay", () => {
     render(<AudienceDisplay />);
 
     expect(screen.getByRole("banner")).toHaveClass("z-30");
+  });
+
+  it("hides the floating timer control when Document Picture-in-Picture is unsupported", () => {
+    render(<AudienceDisplay />);
+
+    expect(
+      screen.queryByRole("button", { name: "Float timer" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens a live floating timer when Document Picture-in-Picture is supported", async () => {
+    const pipDocument = document.implementation.createHTMLDocument("Timer");
+    const pipWindow = {
+      document: pipDocument,
+      closed: false,
+      close: vi.fn(),
+      addEventListener: vi.fn(),
+    } as unknown as Window;
+    const requestWindow = vi.fn().mockResolvedValue(pipWindow);
+
+    Object.defineProperty(window, "documentPictureInPicture", {
+      configurable: true,
+      value: { requestWindow, window: null },
+    });
+
+    render(<AudienceDisplay />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Float timer" }),
+    );
+
+    await waitFor(() => {
+      expect(requestWindow).toHaveBeenCalledWith({ width: 480, height: 320 });
+      expect(
+        pipDocument.body.querySelector('[aria-label="Floating timer"]'),
+      ).not.toBeNull();
+      expect(pipDocument.body.textContent).toContain("Eddie");
+      expect(pipDocument.body.textContent).toContain("10:00");
+    });
+  });
+
+  it("keeps the floating timer in sync with the selected language", async () => {
+    const pipDocument = document.implementation.createHTMLDocument("Timer");
+    const pipWindow = {
+      document: pipDocument,
+      closed: false,
+      close: vi.fn(),
+      addEventListener: vi.fn(),
+    } as unknown as Window;
+
+    Object.defineProperty(window, "documentPictureInPicture", {
+      configurable: true,
+      value: {
+        requestWindow: vi.fn().mockResolvedValue(pipWindow),
+        window: null,
+      },
+    });
+
+    render(
+      <LanguageProvider>
+        <AudienceDisplay />
+      </LanguageProvider>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Float timer" }),
+    );
+    await waitFor(() =>
+      expect(
+        pipDocument.body.querySelector('[aria-label="Floating timer"]'),
+      ).not.toBeNull(),
+    );
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Switch to Chinese" }),
+    );
+
+    await waitFor(() => {
+      expect(pipDocument.documentElement.lang).toBe("zh-CN");
+      expect(
+        pipDocument.body.querySelector('[aria-label="悬浮计时器"]'),
+      ).not.toBeNull();
+      expect(pipDocument.body.textContent).toContain("已暂停");
+      expect(
+        screen.getByRole("button", { name: "关闭悬浮计时器" }),
+      ).toBeInTheDocument();
+    });
   });
 
   it("saves the selected alarm sound and previews it on the first click", async () => {

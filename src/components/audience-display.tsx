@@ -6,13 +6,23 @@ import {
   Maximize2,
   Minimize2,
   Music2,
+  PictureInPicture2,
   Play,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { createPortal } from "react-dom";
 import { BrandMark } from "@/components/brand-mark";
+import { useAppLanguage } from "@/components/language-provider";
 import {
   describeTimer,
   elapsedRatio,
@@ -23,6 +33,7 @@ import {
   timerTone,
 } from "@/lib/format";
 import { usePublicEvent } from "@/lib/store";
+import { translateText } from "@/lib/i18n";
 import {
   CHIME_PRESETS,
   CHIME_SECONDS,
@@ -48,8 +59,49 @@ const AUDIENCE_OVER_BACKGROUND = {
 
 const CHIME_STORAGE_KEY = "timer:audience-chime";
 
+type DocumentPictureInPictureApi = {
+  requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
+  window: Window | null;
+};
+
+function getDocumentPictureInPicture() {
+  return (
+    window as Window & {
+      documentPictureInPicture?: DocumentPictureInPictureApi;
+    }
+  ).documentPictureInPicture;
+}
+
+function subscribeToPictureInPictureSupport() {
+  return () => {};
+}
+
+function hasDocumentPictureInPicture() {
+  return typeof getDocumentPictureInPicture()?.requestWindow === "function";
+}
+
+function preparePictureInPictureDocument(pipWindow: Window) {
+  pipWindow.document.title = "Timer";
+  pipWindow.document.documentElement.style.colorScheme = "dark";
+  pipWindow.document.body.style.margin = "0";
+  pipWindow.document.body.style.overflow = "hidden";
+
+  document
+    .querySelectorAll<HTMLLinkElement | HTMLStyleElement>(
+      'link[rel="stylesheet"], style',
+    )
+    .forEach((styleNode) => {
+      pipWindow.document.head.append(styleNode.cloneNode(true));
+    });
+}
+
+function setPictureInPictureLanguage(pipWindow: Window, locale: string) {
+  pipWindow.document.documentElement.lang = locale;
+}
+
 export function AudienceDisplay() {
   const params = useParams<{ token: string }>();
+  const { language, locale } = useAppLanguage();
   const { event, connection } = usePublicEvent(params.token);
   const segments = useMemo(() => (event ? flattenSegments(event) : []), [event]);
   const runtime = event?.runtime;
@@ -58,6 +110,13 @@ export function AudienceDisplay() {
   const [panelRemaining, setPanelRemaining] = useState(runtime?.panelRemainingSeconds ?? 0);
   const [panelAutoStopped, setPanelAutoStopped] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const pictureInPictureSupported = useSyncExternalStore(
+    subscribeToPictureInPictureSupport,
+    hasDocumentPictureInPicture,
+    () => false,
+  );
+  const [pictureInPictureWindow, setPictureInPictureWindow] =
+    useState<Window | null>(null);
   const { play, disable, isReady } = useChime();
   const [chimePreset, setChimePreset] = useState<ChimePreset>("feather");
   const [soundPickerOpen, setSoundPickerOpen] = useState(false);
@@ -66,6 +125,19 @@ export function AudienceDisplay() {
   const alertTimeout = useRef<number | null>(null);
 
   useWakeLock();
+
+  useEffect(
+    () => () => {
+      getDocumentPictureInPicture()?.window?.close();
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (pictureInPictureWindow) {
+      setPictureInPictureLanguage(pictureInPictureWindow, locale);
+    }
+  }, [locale, pictureInPictureWindow]);
 
   useEffect(() => {
     const storedPreset = window.localStorage.getItem(CHIME_STORAGE_KEY);
@@ -211,6 +283,36 @@ export function AudienceDisplay() {
     if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
     else await document.exitFullscreen();
   }, []);
+
+  const togglePictureInPicture = useCallback(async () => {
+    if (pictureInPictureWindow && !pictureInPictureWindow.closed) {
+      pictureInPictureWindow.close();
+      return;
+    }
+
+    const documentPictureInPicture = getDocumentPictureInPicture();
+    if (!documentPictureInPicture) return;
+
+    try {
+      const pipWindow = await documentPictureInPicture.requestWindow({
+        width: 480,
+        height: 320,
+      });
+      preparePictureInPictureDocument(pipWindow);
+      setPictureInPictureWindow(pipWindow);
+      pipWindow.addEventListener(
+        "pagehide",
+        () => {
+          setPictureInPictureWindow((current) =>
+            current === pipWindow ? null : current,
+          );
+        },
+        { once: true },
+      );
+    } catch (error) {
+      console.warn("Unable to open the floating timer.", error);
+    }
+  }, [pictureInPictureWindow]);
 
   if (!event || !runtime || !segments.length) {
     return (
@@ -412,6 +514,22 @@ export function AudienceDisplay() {
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
           </button>
+          {pictureInPictureSupported && (
+            <button
+              type="button"
+              onClick={() => void togglePictureInPicture()}
+              data-i18n-ignore
+              className="inline-flex min-h-[38px] items-center gap-2 rounded-field border border-white/12 bg-white/4 px-3 text-[12px] font-semibold text-[#b9b8c4] transition-colors duration-150 hover:bg-white/9 hover:text-[#f2f1f8]"
+              aria-pressed={Boolean(
+                pictureInPictureWindow && !pictureInPictureWindow.closed,
+              )}
+            >
+              <PictureInPicture2 size={14} aria-hidden />
+              {pictureInPictureWindow && !pictureInPictureWindow.closed
+                ? translateText("Close floating timer", language)
+                : translateText("Float timer", language)}
+            </button>
+          )}
         </div>
       </header>
 
@@ -488,6 +606,60 @@ export function AudienceDisplay() {
           {speakerAutoStopped ? "Auto-stopped" : "Synced live"}
         </span>
       </footer>
+
+      {pictureInPictureWindow &&
+        !pictureInPictureWindow.closed &&
+        createPortal(
+          <main
+            aria-label={translateText("Floating timer", language)}
+            className="relative flex h-screen min-h-0 flex-col items-center justify-center overflow-hidden p-[clamp(1rem,5vw,2rem)] text-center text-[#f8f7fc]"
+            style={
+              speakerTone === "critical"
+                ? AUDIENCE_OVER_BACKGROUND
+                : AUDIENCE_BACKGROUND
+            }
+          >
+            {alerting && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-over/16 motion-safe:animate-pulse"
+              />
+            )}
+            <span className="relative text-[clamp(0.625rem,3vw,0.75rem)] font-bold tracking-[0.14em] text-[#8d77e9] uppercase">
+              {translateText(stateLabel, language)}
+            </span>
+            <h1 className="relative mt-2 max-w-full truncate text-[clamp(1.125rem,6vw,1.75rem)] leading-none font-semibold">
+              {current.speaker}
+            </h1>
+            <strong
+              className={cn(
+                "relative my-[clamp(0.75rem,4vh,1.25rem)] block font-mono text-[clamp(4rem,min(22vw,28vh),8rem)] leading-[0.9] font-medium tracking-[-0.07em] transition-colors duration-300",
+                speakerTone === "caution" && "text-[#ffb547]",
+                speakerTone === "critical" &&
+                  "text-[#ff7a70] motion-safe:animate-pulse",
+              )}
+            >
+              {formatTimer(remaining)}
+            </strong>
+            {isPanel && (
+              <div className="relative rounded-card border border-white/9 bg-white/4 px-5 py-2">
+                <span className="mr-2 text-[10px] font-bold tracking-[0.1em] text-[#8f8e99] uppercase">
+                  {translateText("Panel", language)}
+                </span>
+                <strong
+                  className={cn(
+                    "font-mono text-[clamp(1.25rem,6vw,2rem)] tracking-[-0.05em]",
+                    panelTone === "caution" && "text-[#ffb547]",
+                    panelTone === "critical" && "text-[#ff7a70]",
+                  )}
+                >
+                  {formatTimer(panelRemaining)}
+                </strong>
+              </div>
+            )}
+          </main>,
+          pictureInPictureWindow.document.body,
+        )}
     </main>
   );
 }
